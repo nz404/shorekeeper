@@ -176,7 +176,7 @@ Di versi ini, setup Proxmox sudah ada di menu Telegram dan web dashboard.
 
 ---
 
-## 💬 Contoh Command Telegram
+## 💬 Contoh Command Web Chat
 
 - `/help`
 - `/ping`
