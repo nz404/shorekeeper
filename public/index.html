@@ -213,6 +213,7 @@
         <button class="qa-btn" onclick="quickAction('laporan',this)">📋 Laporan</button>
         <button class="qa-btn" onclick="toggleDockerPanel()" id="docker-qa-btn">🐳 Docker</button>
         <button class="qa-btn" onclick="toggleUptimePanel()" id="uptime-qa-btn">📊 Uptime</button>
+        <button class="qa-btn" onclick="openPveModal()" id="pve-qa-btn" style="display:none">➕ PVE Cluster</button>
       </div>
     </div>
 
@@ -247,6 +248,55 @@
     </div>
   </div>
 </div>
+
+
+  <!-- Modal Tambah Cluster Proxmox -->
+  <div id="pve-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;align-items:center;justify-content:center">
+    <div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:14px;width:min(420px,92vw);padding:24px;position:relative">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px">
+        <span style="font-size:18px">🖥️</span>
+        <h3 style="margin:0;font-size:15px;color:var(--accent)">Tambah Cluster Proxmox</h3>
+        <button onclick="closePveModal()" style="margin-left:auto;background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:18px">✕</button>
+      </div>
+      <!-- Progress bar -->
+      <div id="pve-progress" style="display:flex;gap:4px;margin-bottom:18px">
+        <div class="pve-step-dot active" data-step="1"></div>
+        <div class="pve-step-dot" data-step="2"></div>
+        <div class="pve-step-dot" data-step="3"></div>
+        <div class="pve-step-dot" data-step="4"></div>
+        <div class="pve-step-dot" data-step="5"></div>
+      </div>
+      <!-- Steps -->
+      <div id="pve-step-1" class="pve-step">
+        <label class="pve-label">Nama Cluster <span style="color:var(--text-muted);font-size:11px">(huruf, angka, tanda -)</span></label>
+        <input id="pve-name" type="text" class="pve-input" placeholder="Contoh: rumah, kantor, vps-1" autocomplete="off">
+      </div>
+      <div id="pve-step-2" class="pve-step" style="display:none">
+        <label class="pve-label">IP / Hostname Proxmox</label>
+        <input id="pve-host" type="text" class="pve-input" placeholder="Contoh: 192.168.1.100" autocomplete="off">
+      </div>
+      <div id="pve-step-3" class="pve-step" style="display:none">
+        <label class="pve-label">Port <span style="color:var(--text-muted);font-size:11px">(default: 8006)</span></label>
+        <input id="pve-port" type="number" class="pve-input" placeholder="8006" value="8006" autocomplete="off">
+      </div>
+      <div id="pve-step-4" class="pve-step" style="display:none">
+        <label class="pve-label">User@Realm</label>
+        <input id="pve-user" type="text" class="pve-input" placeholder="root@pam" value="root@pam" autocomplete="off">
+      </div>
+      <div id="pve-step-5" class="pve-step" style="display:none">
+        <label class="pve-label">API Token Secret <span style="color:var(--text-muted);font-size:11px">(Token Name harus: shorekeeper)</span></label>
+        <input id="pve-secret" type="password" class="pve-input" placeholder="Token secret dari Proxmox" autocomplete="off">
+        <div id="pve-summary" style="margin-top:10px;padding:10px;background:var(--bg-btn);border-radius:8px;font-size:12px;color:var(--text-sec);line-height:1.8"></div>
+      </div>
+      <!-- Error -->
+      <div id="pve-error" style="display:none;color:#e05555;font-size:12px;margin:8px 0;padding:8px 12px;background:rgba(224,85,85,.1);border-radius:6px;border-left:3px solid #e05555"></div>
+      <!-- Buttons -->
+      <div style="display:flex;gap:8px;margin-top:16px">
+        <button id="pve-back-btn" onclick="pveWizardBack()" style="display:none;flex:1;background:none;border:1px solid var(--border);color:var(--text-sec);padding:9px;border-radius:8px;cursor:pointer">← Kembali</button>
+        <button id="pve-next-btn" onclick="pveWizardNext()" style="flex:1;background:var(--accent-dim);border:1px solid var(--accent);color:var(--accent);padding:9px;border-radius:8px;cursor:pointer;font-weight:500">Lanjut →</button>
+      </div>
+    </div>
+  </div>
 
 <script src="https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pixi.js@6/dist/browser/pixi.min.js"></script>

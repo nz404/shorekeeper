@@ -6,6 +6,7 @@ import { getResources, getNodesStatus } from '../services/proxmox.service';
 import { sshExecSafe } from '../services/ssh.service';
 import { getAllAliases, getAliasFromDB, getMonitorServers, getSetting, setSetting } from '../database/queries';
 import { collectServerLogs, analyzeLogsWithAI, ServerLog } from './logAggregator';
+import { getUptimeHistory, calculateUptimePct, UptimeHistoryService } from '../services/uptimeHistory.service';
 
 // ─────────────────────────────────────────────
 // GROQ CLIENT
@@ -125,12 +126,74 @@ export const buildDailyReport = async (session: 'pagi' | 'malam'): Promise<strin
 };
 
 // ─────────────────────────────────────────────
+// BUILD LAPORAN MINGGUAN DENGAN ANALITIK & REKOMENDASI
+// ─────────────────────────────────────────────
+
+export const buildWeeklyReport = async (): Promise<string> => {
+    const waktu = formatLocal(new Date(), { dateStyle: 'full', timeStyle: 'short' });
+
+    // Kumpulkan data tren uptime
+    const monitorList = await getMonitorServers();
+    let uptimeAnalysis = '';
+    if (monitorList.length) {
+        const allAliases = await getAllAliases();
+        const servers = allAliases.filter((a: any) => monitorList.includes(a.alias));
+        const fullServers = await Promise.all(servers.map((s: any) => getAliasFromDB(s.alias)));
+        const valid = fullServers.filter(Boolean);
+
+        const uptimeData = await Promise.all(valid.map(async (s: any) => {
+            const pct = await calculateUptimePct(s.alias, 7);
+            const history = await getUptimeHistory(s.alias, 7);
+            const downCount = history.filter((h: any) => h.status === 'down').length;
+            return { alias: s.alias, uptimePct: pct, downEvents: downCount };
+        }));
+
+        uptimeAnalysis = uptimeData.map(d =>
+            `${d.alias}: Uptime ${d.uptimePct.toFixed(1)}% (${d.downEvents} kali down dalam 7 hari)`
+        ).join('\n');
+    }
+
+    // Analisis Proxmox (jika ada data historis, tapi untuk sederhana gunakan status terkini)
+    let proxmoxAnalysis = '';
+    try {
+        const [resources, nodeStatus] = await Promise.all([getResources(), getNodesStatus()]);
+        const running = resources.filter((r: any) => r.status === 'running').length;
+        const total = resources.length;
+        proxmoxAnalysis = `Proxmox: ${running}/${total} VM/LXC running. ${nodeStatus}`;
+    } catch {
+        proxmoxAnalysis = 'Proxmox: Tidak dapat dianalisis.';
+    }
+
+    // Data mentah untuk AI
+    const rawData = `UPTIME TREN 7 HARI:\n${uptimeAnalysis}\n\nPROXMOX STATUS:\n${proxmoxAnalysis}`;
+
+    // Gunakan AI untuk analisis dan rekomendasi
+    try {
+        const res = await openai.chat.completions.create({
+            model: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile',
+            messages: [
+                { role: 'system', content: SHOREKEEPER_PROMPT },
+                {
+                    role: 'user',
+                    content: `SK membuat laporan mingguan analitik infrastruktur untuk ${process.env.ADMIN_NAME || 'Irvan'}.\n\nData Tren:\n${rawData}\n\nAnalisis tren uptime, identifikasi pola masalah (misalnya server yang sering down), dan berikan rekomendasi preventif untuk meningkatkan stabilitas. Jangan gunakan Markdown.`,
+                },
+            ],
+            max_tokens: 1000,
+        });
+        return `📊 Laporan Mingguan Analitik — ${waktu}\n\n${res.choices[0]?.message?.content || rawData}`;
+    } catch {
+        return `📊 Laporan Mingguan Analitik — ${waktu}\n\n${rawData}`;
+    }
+};
+
+// ─────────────────────────────────────────────
 // INIT REPORTER JOB
 // ─────────────────────────────────────────────
 
 export const initReporterJob = async (bot: Telegraf, chatId: string) => {
     await loadReportSchedule();
 
+    // Laporan harian
     setInterval(async () => {
         try {
             const { pagi, malam } = getReportSchedule();
@@ -144,6 +207,19 @@ export const initReporterJob = async (bot: Telegraf, chatId: string) => {
             }
         } catch (err: any) {
             console.error('Reporter error:', err.message);
+        }
+    }, 60_000);
+
+    // Laporan mingguan (setiap Senin pukul 9 pagi)
+    setInterval(async () => {
+        try {
+            const now = new Date();
+            if (now.getDay() === 1 && now.getHours() === 9 && now.getMinutes() === 0) { // Senin 09:00
+                const report = await buildWeeklyReport();
+                await bot.telegram.sendMessage(chatId, report);
+            }
+        } catch (err: any) {
+            console.error('Weekly reporter error:', err.message);
         }
     }, 60_000);
 };

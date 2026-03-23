@@ -9,9 +9,9 @@ import {
     removeMonitorServer,
 } from '../database/queries';
 import { TEKS, wrapWithSKVoice } from '../config/persona';
-import { createPendingFix } from '../services/autoFix';
+import { createPendingFix, AutoFixService } from '../services/autoFix.service';
 import { updateMood, ServerStatus } from '../config/mood';
-import { recordUptimeEvent, initServerStatus } from '../services/uptimeHistory';
+import { recordUptimeEvent, initServerStatus, UptimeHistoryService } from '../services/uptimeHistory.service';
 
 // ─────────────────────────────────────────────
 // SAFE EDIT — fallback ke reply jika gagal (bukan rekursif!)
@@ -307,6 +307,26 @@ export const initMonitorJob = (bot: Telegraf, chatId: string) => {
                         detail:   `Server ${m.alias} tidak dapat dihubungi: ${m.error}`,
                     }).catch(() => {});
                     continue;
+                }
+
+                if (m.cpu > THRESHOLD.cpu) {
+                    await createPendingFix(bot, chatId, {
+                        type:     'high_cpu',
+                        severity: m.cpu > 95 ? 'critical' : 'warning',
+                        alias:    m.alias,
+                        detail:   `CPU pada ${m.alias} tinggi: ${m.cpu.toFixed(1)}%`,
+                        metrics:  { cpu: m.cpu },
+                    }).catch(() => {});
+                }
+
+                if (m.ramPct > THRESHOLD.ram) {
+                    await createPendingFix(bot, chatId, {
+                        type:     'high_ram',
+                        severity: m.ramPct > 95 ? 'critical' : 'warning',
+                        alias:    m.alias,
+                        detail:   `RAM pada ${m.alias} tinggi: ${m.ramPct}% (${m.ramUsed}/${m.ramTotal}MB)`,
+                        metrics:  { ram: m.ramPct },
+                    }).catch(() => {});
                 }
 
                 for (const d of m.disks) {

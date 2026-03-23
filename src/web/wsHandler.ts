@@ -7,8 +7,8 @@ import { getNodesStatus, getResources } from '../services/proxmox.service';
 import { buildFullReport } from '../jobs/monitor';
 import { buildDailyReport } from '../jobs/reporter';
 import { localHour } from '../config/timezone';
-import { runRemoteSSH } from '../services/ssh.service';
-import { listContainers } from '../services/docker';
+import { runRemoteSSH, SSHService } from '../services/ssh.service';
+import { listContainers, DockerService } from '../services/docker.service';
 import {
     sessions, checkGuestLimit, incrementGuestCount, GUEST_LIMIT,
 } from './authMiddleware';

@@ -3,14 +3,19 @@ dotenv.config();
 
 import { Telegraf } from 'telegraf';
 import { handleAIChat } from './modules/ai';
-import { handleManageNode, handleCheckStatus, handleProxmoxAction } from './modules/proxmox';
+import {
+    handleManagePulau, handleCheckStatus, handleProxmoxAction,
+    handleProxmoxMenu, showAddClusterPrompt,
+    showDeleteClusterMenu, handleDeleteCluster,
+    handlePveWizardStep,
+} from './modules/proxmox';
 import { handleSSHWizard, resetSessionTimeout } from './modules/ssh';
 import { handleLocalTerminal } from './modules/terminal';
 import { showTroubleshootMenu, showKategoriMenu, handleTroubleshoot, KATEGORI_LIST } from './modules/troubleshoot';
 import { showMonitorMenu, handleMonitorAction } from '../jobs/monitor';
 import { showDockerMenu, showContainerList, showContainerInfo, handleContainerAction, showContainerLogs, showContainerStats } from './modules/dockerHandler';
 import { showPingMenu, showPingAddPrompt, handleAddPingTarget, handleDeletePingTarget, checkPingNow } from './modules/pingHandler';
-import { approveFix, rejectFix } from '../services/autoFix';
+import { approveFix, rejectFix, AutoFixService } from '../services/autoFix.service';
 import {
     showReminderMenu, showReminderAddStep1, showReminderAddStep2, showReminderAddStep3,
     resolveReminderTime, saveReminder, handleDeleteReminder, handleAddReminder,
@@ -71,13 +76,11 @@ export const registerHandlers = (bot: Telegraf, MY_CHAT_ID: string) => {
         text: TEKS.menuUtama(),
         markup: {
             inline_keyboard: [
-                [{ text: '🌐 SSH Manager',  callback_data: 'menu_ssh'          }, { text: '🖥️ Proxmox',    callback_data: 'menu_proxmox'    }],
-                [{ text: '📋 Daftar Alias', callback_data: 'list_aliases'      }, { text: '📊 Status',     callback_data: 'status'          }],
-                [{ text: '🔍 Troubleshoot', callback_data: 'menu_troubleshoot' }, { text: '🖥️ Monitor',    callback_data: 'menu_monitor'    }],
-                [{ text: '🐳 Docker',       callback_data: 'menu_docker'       }, { text: '📋 Laporan',    callback_data: 'menu_laporan'    }],
-                [{ text: '⏰ Reminder',      callback_data: 'menu_reminder'     }, { text: '📒 Catatan',    callback_data: 'menu_notes'      }],
-                [{ text: '📡 Ping Monitor', callback_data: 'menu_ping'         }],
-                [{ text: '⚙️ Maintenance',  callback_data: 'menu_maintenance'  }, { text: '❌ Tutup Menu', callback_data: 'close_menu'      }],
+                [{ text: '🌐 SSH Manager',  callback_data: 'menu_ssh'          }, { text: '🖥️ Proxmox',    callback_data: 'menu_proxmox'    }, { text: '📊 Status',     callback_data: 'status'          }],
+                [{ text: '📋 Daftar SSH', callback_data: 'list_aliases'      }, { text: '🔍 Troubleshoot', callback_data: 'menu_troubleshoot' }, { text: '🖥️ Monitor',    callback_data: 'menu_monitor'    }],
+                [{ text: '🐳 Docker',       callback_data: 'menu_docker'       }, { text: '📋 Laporan',    callback_data: 'menu_laporan'    }, { text: '📡 Ping Monitor', callback_data: 'menu_ping'         }],
+                [{ text: '⏰ Reminder',      callback_data: 'menu_reminder'     }, { text: '📒 Catatan',    callback_data: 'menu_notes'      }, { text: '⚙️ Maintenance',  callback_data: 'menu_maintenance'  }],
+                [{ text: '❌ Tutup Menu', callback_data: 'close_menu'      }],
             ],
         },
     });
@@ -183,8 +186,34 @@ export const registerHandlers = (bot: Telegraf, MY_CHAT_ID: string) => {
         }
 
         // ── Proxmox ──
-        if (data === 'menu_proxmox') { await ack(ctx); return handleManageNode(ctx); }
-        if (data === 'status')       { await ack(ctx); return handleCheckStatus(ctx); }
+        if (data === 'menu_proxmox')  { await ack(ctx); return handleProxmoxMenu(ctx); }
+        if (data === 'pve_list')      { await ack(ctx); return handleManagePulau(ctx); }
+        if (data === 'pve_status')    { await ack(ctx); return handleCheckStatus(ctx); }
+        if (data === 'status')        { await ack(ctx); return handleCheckStatus(ctx); }
+        if (data === 'pve_add') {
+            await ack(ctx);
+            remoteSessions.set(userId, { pve_step: 'pve_name' });
+            return showAddClusterPrompt(ctx);
+        }
+        if (data === 'pve_del_menu')  { await ack(ctx); return showDeleteClusterMenu(ctx); }
+
+        if (data.startsWith('pve_del_') && !data.startsWith('pve_del_menu')) {
+            const cId = parseInt(data.replace('pve_del_', ''));
+            return handleDeleteCluster(ctx, cId);
+        }
+
+        if (data.startsWith('pve_info_')) {
+            await ack(ctx);
+            // pve_info_{type}_{vmid}_{node}_{clusterId}
+            const p = data.split('_');
+            return handleProxmoxAction(ctx, 'info', p[2], p[3], p[4], parseInt(p[5]));
+        }
+
+        if (data.startsWith('pve_exec_')) {
+            // pve_exec_{type}_{vmid}_{task}_{node}_{clusterId}
+            const p = data.split('_');
+            return handleProxmoxAction(ctx, 'exec', p[2], p[3], p[4], parseInt(p[6]));
+        }
 
         // ── Monitor ──
         if (data === 'menu_monitor') { await ack(ctx); return showMonitorMenu(ctx); }
@@ -413,17 +442,6 @@ export const registerHandlers = (bot: Telegraf, MY_CHAT_ID: string) => {
             return rejectFix(ctx, data.replace('autofix_reject_', ''));
         }
 
-        // ── Proxmox Action (info/exec) ──
-        const parts  = data.split('_');
-        const action = parts[0];
-        const type   = parts[1];
-        const id     = parts[2];
-        const node   = action === 'exec' ? parts[4] : parts[3];
-
-        if (action && type && id && node && ['info', 'exec'].includes(action)) {
-            return handleProxmoxAction(ctx, action, type, id, node);
-        }
-
         // Fallback: ack agar query tidak expired
         await ack(ctx);
     });
@@ -456,6 +474,11 @@ export const registerHandlers = (bot: Telegraf, MY_CHAT_ID: string) => {
         if (session?.step === 'ping_add_ip') {
             remoteSessions.delete(userId);
             return handleAddPingTarget(ctx, 'ip', userInput);
+        }
+
+        // B2. Wizard tambah cluster Proxmox
+        if (session?.pve_step) {
+            return handlePveWizardStep(ctx, userId, userInput, session, remoteSessions);
         }
 
         // C. Wizard reminder — input pesan

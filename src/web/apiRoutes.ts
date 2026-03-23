@@ -10,8 +10,12 @@ import {
 import { db } from '../database/connection';
 import { getReportSchedule, updateReportSchedule } from '../jobs/reporter';
 import { getCurrentMood, getMoodEmoji } from '../config/mood';
-import { getUptimeSummary, getUptimeHistory, calculateUptimePct } from '../services/uptimeHistory';
-import { listContainers, controlContainer, getContainerLogs } from '../services/docker';
+import { getUptimeSummary, getUptimeHistory, calculateUptimePct, UptimeHistoryService } from '../services/uptimeHistory.service';
+import { listContainers, controlContainer, getContainerLogs, DockerService } from '../services/docker.service';
+import {
+    getAllClusters, addCluster, removeCluster,
+    testClusterConnection, getNodesStatus, getResources,
+} from '../services/proxmox.service';
 
 export const router = Router();
 
@@ -260,6 +264,55 @@ router.get('/uptime/:alias', async (req, res) => {
         getUptimeHistory(alias, days),
     ]);
     return (res as any).json({ ok: true, alias, uptimePct: pct, events, days });
+});
+
+// ─────────────────────────────────────────────
+// PROXMOX CLUSTERS
+// ─────────────────────────────────────────────
+
+// GET semua cluster
+router.get('/proxmox/clusters', async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    const clusters = await getAllClusters();
+    return (res as any).json({ ok: true, clusters });
+});
+
+// POST tambah cluster baru
+router.post('/proxmox/clusters', async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    const { name, host, port, user, secret } = req.body;
+    if (!name || !host || !port || !user || !secret) {
+        return (res as any).status(400).json({ ok: false, message: 'Semua field wajib diisi.' });
+    }
+    // Test koneksi dulu
+    const test = await testClusterConnection({ name, host, port: parseInt(port), user, token_id: 'shorekeeper', secret, token_secret: secret });
+    if (!test.ok) {
+        return (res as any).status(400).json({ ok: false, message: `Koneksi gagal: ${test.msg}` });
+    }
+    const id = await addCluster(name, host, parseInt(port), user, secret);
+    return (res as any).json({ ok: !!id, id, version: test.msg });
+});
+
+// DELETE hapus cluster
+router.delete('/proxmox/clusters/:id', async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    const ok = await removeCluster(parseInt(req.params.id));
+    return (res as any).json({ ok });
+});
+
+// GET test koneksi tanpa simpan
+router.post('/proxmox/clusters/test', async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    const { name, host, port, user, secret } = req.body;
+    const test = await testClusterConnection({ name: name || 'test', host, port: parseInt(port), user, token_id: 'shorekeeper', secret, token_secret: secret });
+    return (res as any).json(test);
+});
+
+// GET resources semua cluster
+router.get('/proxmox/resources', async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    const resources = await getResources();
+    return (res as any).json({ ok: true, resources });
 });
 
 // ─────────────────────────────────────────────

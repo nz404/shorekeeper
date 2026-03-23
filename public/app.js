@@ -78,6 +78,9 @@ function applyRoleRestrictions() {
 
   const dockerPanel = document.getElementById('docker-panel');
   if (dockerPanel) dockerPanel.classList.remove('open');
+  // Tombol PVE Cluster — admin only
+  const pveBtn = document.getElementById('pve-qa-btn');
+  if (pveBtn) pveBtn.style.display = userRole === 'admin' ? '' : 'none';
 
   // Tampilkan badge guest - limit dari server
   if (isGuest) {
@@ -1268,3 +1271,145 @@ async function saveEditNote(id) {
 function cancelEdit(btn) {
   btn.closest('.sp-edit-form')?.remove();
 }
+
+
+// ════════════════════════════════════
+// PROXMOX CLUSTER WIZARD (WEB)
+// ════════════════════════════════════
+
+let pveCurrentStep = 1;
+const PVE_TOTAL_STEPS = 5;
+
+function openPveModal() {
+  pveCurrentStep = 1;
+  document.getElementById('pve-modal').style.display = 'flex';
+  document.getElementById('pve-error').style.display = 'none';
+  // Reset semua field
+  ['pve-name','pve-host','pve-port','pve-user','pve-secret'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.value = id === 'pve-port' ? '8006' : id === 'pve-user' ? 'root@pam' : ''; }
+  });
+  pveGoToStep(1);
+  setTimeout(() => document.getElementById('pve-name')?.focus(), 100);
+}
+
+function closePveModal() {
+  document.getElementById('pve-modal').style.display = 'none';
+}
+
+function pveGoToStep(step) {
+  pveCurrentStep = step;
+  // Sembunyikan semua step
+  for (let i = 1; i <= PVE_TOTAL_STEPS; i++) {
+    const el = document.getElementById(`pve-step-${i}`);
+    if (el) el.style.display = i === step ? 'block' : 'none';
+  }
+  // Update progress dots
+  document.querySelectorAll('.pve-step-dot').forEach(dot => {
+    const s = parseInt(dot.dataset.step);
+    dot.classList.toggle('active',    s === step);
+    dot.classList.toggle('completed', s < step);
+  });
+  // Tombol back
+  const backBtn = document.getElementById('pve-back-btn');
+  const nextBtn = document.getElementById('pve-next-btn');
+  if (backBtn) backBtn.style.display = step > 1 ? 'block' : 'none';
+  if (nextBtn) nextBtn.textContent = step === PVE_TOTAL_STEPS ? '✅ Simpan' : 'Lanjut →';
+  // Update summary di step 5
+  if (step === PVE_TOTAL_STEPS) pveUpdateSummary();
+  document.getElementById('pve-error').style.display = 'none';
+  // Focus input aktif
+  const inputs = ['pve-name','pve-host','pve-port','pve-user','pve-secret'];
+  setTimeout(() => document.getElementById(inputs[step - 1])?.focus(), 80);
+}
+
+function pveUpdateSummary() {
+  const el = document.getElementById('pve-summary');
+  if (!el) return;
+  el.innerHTML =
+    `📌 Nama : <b>${document.getElementById('pve-name').value}</b><br>` +
+    `🌐 Host : <b>${document.getElementById('pve-host').value}:${document.getElementById('pve-port').value}</b><br>` +
+    `👤 User : <b>${document.getElementById('pve-user').value}</b>`;
+}
+
+function pveShowError(msg) {
+  const el = document.getElementById('pve-error');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+async function pveWizardNext() {
+  const step = pveCurrentStep;
+
+  if (step === 1) {
+    const val = document.getElementById('pve-name').value.trim();
+    if (!val) return pveShowError('Nama cluster tidak boleh kosong.');
+    if (!/^[\w\-]+$/.test(val)) return pveShowError('Nama hanya boleh huruf, angka, dan tanda -');
+    pveGoToStep(2);
+
+  } else if (step === 2) {
+    const val = document.getElementById('pve-host').value.trim();
+    if (!val) return pveShowError('IP atau hostname tidak boleh kosong.');
+    pveGoToStep(3);
+
+  } else if (step === 3) {
+    const val = parseInt(document.getElementById('pve-port').value);
+    if (isNaN(val) || val < 1 || val > 65535) return pveShowError('Port tidak valid. Biasanya 8006.');
+    pveGoToStep(4);
+
+  } else if (step === 4) {
+    const val = document.getElementById('pve-user').value.trim();
+    if (!val) return pveShowError('User tidak boleh kosong. Contoh: root@pam');
+    pveGoToStep(5);
+
+  } else if (step === 5) {
+    // Submit
+    const secret = document.getElementById('pve-secret').value.trim();
+    if (!secret) return pveShowError('Token secret tidak boleh kosong.');
+
+    const nextBtn = document.getElementById('pve-next-btn');
+    nextBtn.textContent = '⏳ Menyimpan...';
+    nextBtn.disabled    = true;
+
+    try {
+      const r = await fetch('/api/proxmox/clusters', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          name:   document.getElementById('pve-name').value.trim(),
+          host:   document.getElementById('pve-host').value.trim(),
+          port:   document.getElementById('pve-port').value,
+          user:   document.getElementById('pve-user').value.trim(),
+          secret,
+        }),
+      });
+      const d = await r.json();
+      if (d.ok) {
+        closePveModal();
+        // Refresh cluster list kalau panel terbuka
+        if (document.getElementById('uptime-panel')?.classList.contains('open')) loadUptimeData();
+        // Tampilkan notif sukses di chat
+        addMsg('assistant', 'SK', `✅ Cluster **${document.getElementById('pve-name').value}** berhasil ditambahkan! Versi: ${d.version}`);
+      } else {
+        pveShowError(d.message || 'Gagal menyimpan cluster.');
+      }
+    } catch (err) {
+      pveShowError('Koneksi error: ' + err.message);
+    } finally {
+      nextBtn.textContent = '✅ Simpan';
+      nextBtn.disabled    = false;
+    }
+  }
+}
+
+function pveWizardBack() {
+  if (pveCurrentStep > 1) pveGoToStep(pveCurrentStep - 1);
+}
+
+// Enter key support di modal
+document.addEventListener('keydown', e => {
+  if (document.getElementById('pve-modal')?.style.display === 'flex') {
+    if (e.key === 'Enter')  { e.preventDefault(); pveWizardNext(); }
+    if (e.key === 'Escape') closePveModal();
+  }
+});

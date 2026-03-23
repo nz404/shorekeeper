@@ -101,6 +101,20 @@ const initDatabase = async (): Promise<void> => {
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
         },
         {
+            name: 'proxmox_clusters',
+            sql: `CREATE TABLE IF NOT EXISTS proxmox_clusters (
+                id     INT AUTO_INCREMENT PRIMARY KEY,
+                name   VARCHAR(100) NOT NULL UNIQUE,
+                host   VARCHAR(255) NOT NULL,
+                port   INT NOT NULL DEFAULT 8006,
+                user   VARCHAR(100) NOT NULL DEFAULT 'root@pam',
+                token_id VARCHAR(100) NOT NULL DEFAULT 'shorekeeper',
+                secret VARCHAR(500) NOT NULL,
+                token_secret VARCHAR(500) NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+        },
+        {
             name: 'notes',
             sql: `CREATE TABLE IF NOT EXISTS notes (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -119,6 +133,43 @@ const initDatabase = async (): Promise<void> => {
         await db.execute(table.sql);
         console.log(`✅ Tabel '${table.name}' siap.`);
     }
+
+    const ensureColumn = async (sql: string, successMsg: string, infoMsg: string) => {
+        try {
+            await db.execute(sql);
+            console.log(successMsg);
+        } catch (e) {
+            console.log(infoMsg);
+        }
+    };
+
+    await ensureColumn(
+        `ALTER TABLE proxmox_clusters ADD COLUMN IF NOT EXISTS secret VARCHAR(500) NOT NULL`,
+        '✅ Kolom secret di proxmox_clusters siap.',
+        'ℹ️ Kolom secret sudah ada atau gagal tambah (mungkin sudah ada).'
+    );
+
+    await ensureColumn(
+        `ALTER TABLE proxmox_clusters ADD COLUMN IF NOT EXISTS token_id VARCHAR(100) NOT NULL DEFAULT 'shorekeeper'`,
+        '✅ Kolom token_id di proxmox_clusters siap.',
+        'ℹ️ Kolom token_id sudah ada atau gagal tambah (mungkin sudah ada).'
+    );
+
+    await ensureColumn(
+        `ALTER TABLE proxmox_clusters ADD COLUMN IF NOT EXISTS token_secret VARCHAR(500) NOT NULL DEFAULT ''`,
+        '✅ Kolom token_secret di proxmox_clusters siap.',
+        'ℹ️ Kolom token_secret sudah ada atau gagal tambah (mungkin sudah ada).'
+    );
+
+    // Sync token_secret <-> secret for compatibility
+    try {
+        await db.execute(`UPDATE proxmox_clusters SET token_secret = secret WHERE token_secret = '' OR token_secret IS NULL`);
+        await db.execute(`UPDATE proxmox_clusters SET secret = token_secret WHERE secret = '' OR secret IS NULL`);
+        console.log('✅ Sync token_secret/secret saya lakukan.');
+    } catch (e) {
+        console.log('ℹ️ Tidak bisa sync token_secret/secret (boleh diabaikan jika sudah benar).');
+    }
+
     console.log('🛡️ Database Shorekeeper siap!');
 };
 

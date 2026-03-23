@@ -527,3 +527,68 @@ textarea.sp-edit-input { resize: vertical; min-height: 70px; }
   transition: background .15s;
 }
 .sp-edit-btn:hover { background: var(--accent); color: #000; }
+
+/* ════════════════════════════════════
+   PROXMOX CLUSTER WIZARD MODAL
+   ════════════════════════════════════ */
+
+#pve-modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.75);
+  z-index: 1000;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(4px);
+}
+
+#pve-modal > div {
+  animation: pveSlideIn .2s ease;
+}
+
+@keyframes pveSlideIn {
+  from { opacity: 0; transform: translateY(-16px) scale(.97); }
+  to   { opacity: 1; transform: translateY(0)    scale(1);    }
+}
+
+/* Progress dots */
+.pve-step-dot {
+  flex: 1;
+  height: 4px;
+  background: var(--border);
+  border-radius: 4px;
+  transition: background .25s, transform .15s;
+}
+.pve-step-dot.active    { background: var(--accent); transform: scaleY(1.8); }
+.pve-step-dot.completed { background: #3aaa70; }
+
+/* Step content */
+.pve-step { animation: pveFadeIn .18s ease; }
+@keyframes pveFadeIn {
+  from { opacity: 0; transform: translateX(8px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+.pve-label {
+  display: block;
+  font-size: 12px;
+  color: var(--text-sec);
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+.pve-input {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--bg-btn, #0a1520);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-pri, #c8e6f5);
+  font-size: 14px;
+  padding: 10px 14px;
+  outline: none;
+  transition: border-color .15s;
+}
+.pve-input:focus { border-color: var(--accent); }
+.pve-input::placeholder { color: var(--text-muted); }

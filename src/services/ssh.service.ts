@@ -123,3 +123,9 @@ export const sshExecSafe = (
         });
     });
 };
+
+export const SSHService = {
+    runRemoteSSH,
+    sshExecMulti,
+    sshExecSafe,
+};

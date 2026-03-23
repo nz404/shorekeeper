@@ -1,4 +1,4 @@
-import { openai } from '../../services/ai';
+import { openai } from '../../services/ai.service';
 import { SHOREKEEPER_PROMPT } from '../../config/persona';
 import { saveChat, getChatContext, getChatByDate } from '../../database/queries';
 

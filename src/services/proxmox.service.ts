@@ -1,69 +1,205 @@
 import axios from 'axios';
-import * as dotenv from 'dotenv';
 import https from 'https';
-
-dotenv.config();
-
-// ─────────────────────────────────────────────
-// KONFIGURASI
-// ─────────────────────────────────────────────
-
-const agent        = new https.Agent({ rejectUnauthorized: false });
-const PVE_HOST     = process.env.PVE_HOST || '127.0.0.1';
-const PVE_PORT     = process.env.PVE_PORT || '8006';
-const PVE_BASE_URL = `https://${PVE_HOST}:${PVE_PORT}/api2/json`;
-const AUTH_HEADER  = `PVEAPIToken=${process.env.PVE_USER!}!shorekeeper=${process.env.PVE_TOKEN_SECRET!}`;
-
-const pveGet  = (path: string) => axios.get(`${PVE_BASE_URL}${path}`,    { headers: { Authorization: AUTH_HEADER }, httpsAgent: agent });
-const pvePost = (path: string) => axios.post(`${PVE_BASE_URL}${path}`, {}, { headers: { Authorization: AUTH_HEADER }, httpsAgent: agent });
+import { db } from '../database/connection';
 
 // ─────────────────────────────────────────────
-// STATUS NODE
+// INTERFACE
 // ─────────────────────────────────────────────
 
-export const getNodesStatus = async (): Promise<string> => {
+export interface PVECluster {
+    id:     number;
+    name:   string;
+    host:   string;
+    port:   number;
+    user:   string;
+    token_id: string;
+    secret: string;
+    token_secret?: string;
+}
+
+export interface PVEResource {
+    vmid:        number;
+    name:        string;
+    type:        string;
+    status:      string;
+    node:        string;
+    clusterId:   number;
+    clusterName: string;
+}
+
+// ─────────────────────────────────────────────
+// DB QUERIES — CRUD cluster
+// ─────────────────────────────────────────────
+
+export const getAllClusters = async (): Promise<PVECluster[]> => {
     try {
-        const { data: { data: nodes } } = await pveGet('/nodes');
+        const [rows]: any = await db.execute(
+            'SELECT * FROM proxmox_clusters ORDER BY id ASC'
+        );
+        return rows as PVECluster[];
+    } catch { return []; }
+};
 
-        const ADMIN_NAME = process.env.ADMIN_NAME || 'Irvan';
-        let report = `📊 Status Cluster Proxmox:\n`;
+export const getClusterById = async (id: number): Promise<PVECluster | null> => {
+    try {
+        const [rows]: any = await db.execute(
+            'SELECT * FROM proxmox_clusters WHERE id = ?', [id]
+        );
+        return rows[0] || null;
+    } catch { return null; }
+};
 
-        for (const node of nodes) {
-            const { data: { data: s } } = await pveGet(`/nodes/${node.node}/status`);
+export const addCluster = async (
+    name: string, host: string, port: number, user: string, secret: string
+): Promise<number | null> => {
+    try {
+        const [result]: any = await db.execute(
+            'INSERT INTO proxmox_clusters (name, host, port, user, token_id, secret, token_secret) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [name, host, port, user, 'shorekeeper', secret, secret]
+        );
+        return result.insertId;
+    } catch (e: any) {
+        console.error('addCluster error:', e.message);
+        return null;
+    }
+};
 
-            const cpu         = (s.cpu * 100).toFixed(1);
-            const memUsed     = (s.memory.used  / 1024 ** 3).toFixed(2);
-            const memTotal    = (s.memory.total / 1024 ** 3).toFixed(2);
-            const uptimeDay   = (s.uptime / 86400).toFixed(1);
-            const statusLabel = node.status === 'online' ? '✅ Online' : '🔴 Offline';
+export const updateCluster = async (
+    id: number, name: string, host: string,
+    port: number, user: string, secret: string
+): Promise<boolean> => {
+    try {
+        await db.execute(
+            'UPDATE proxmox_clusters SET name=?, host=?, port=?, user=?, token_id=?, secret=?, token_secret=? WHERE id=?',
+            [name, host, port, user, 'shorekeeper', secret, secret, id]
+        );
+        return true;
+    } catch { return false; }
+};
 
-            report += `\n🖥️ Node: ${node.node.toUpperCase()}\n`;
-            report += `├ Status: ${statusLabel}\n`;
-            report += `├ CPU: ${cpu}%\n`;
-            report += `├ RAM: ${memUsed} / ${memTotal} GB\n`;
-            report += `└ Uptime: ${uptimeDay} hari\n`;
-        }
+export const removeCluster = async (id: number): Promise<boolean> => {
+    try {
+        const [result]: any = await db.execute(
+            'DELETE FROM proxmox_clusters WHERE id = ?', [id]
+        );
+        return result.affectedRows > 0;
+    } catch { return false; }
+};
 
-        report += `\nSemua node terpantau, Kak ${ADMIN_NAME}. 🛡️`;
-        return report;
-
+// Test koneksi sebelum simpan
+export const testClusterConnection = async (
+    cluster: Omit<PVECluster, 'id'>
+): Promise<{ ok: boolean; msg: string }> => {
+    try {
+        const tokenSecret = cluster.token_secret || cluster.secret;
+        const a = new https.Agent({ rejectUnauthorized: false });
+        const r = await axios.get(
+            `https://${cluster.host}:${cluster.port}/api2/json/version`,
+            {
+                headers:    { Authorization: `PVEAPIToken=${cluster.user}!${cluster.token_id}=${tokenSecret}` },
+                httpsAgent: a,
+                timeout:    8_000,
+            }
+        );
+        const ver = r.data?.data?.version || 'unknown';
+        return { ok: true, msg: `Proxmox VE ${ver}` };
     } catch (err: any) {
-        console.error('🚨 PROXMOX ERROR:', err.response?.data || err.message);
-        return 'SK tidak dapat terhubung ke Proxmox saat ini. Cek koneksi ke host Proxmox ya.';
+        const msg = err.code === 'ECONNREFUSED'  ? 'Koneksi ditolak — cek host/port'
+                  : err.code === 'ETIMEDOUT'     ? 'Timeout — host tidak merespons'
+                  : err.response?.status === 401 ? 'Token tidak valid / tidak punya akses'
+                  : err.message;
+        return { ok: false, msg };
     }
 };
 
 // ─────────────────────────────────────────────
-// LIST SEMUA VM & LXC
+// HTTP CLIENT PER CLUSTER
 // ─────────────────────────────────────────────
 
-export const getResources = async (): Promise<any[]> => {
-    try {
-        const { data: { data } } = await pveGet('/cluster/resources?type=vm');
-        return data;
-    } catch {
-        return [];
+const agent = new https.Agent({ rejectUnauthorized: false });
+
+const pveGet = (c: PVECluster, path: string) =>
+    axios.get(`https://${c.host}:${c.port}/api2/json${path}`, {
+        headers:    { Authorization: `PVEAPIToken=${c.user}!shorekeeper=${c.secret}` },
+        httpsAgent: agent,
+        timeout:    10_000,
+    });
+
+const pvePost = (c: PVECluster, path: string) =>
+    axios.post(`https://${c.host}:${c.port}/api2/json${path}`, {}, {
+        headers:    { Authorization: `PVEAPIToken=${c.user}!shorekeeper=${c.secret}` },
+        httpsAgent: agent,
+        timeout:    10_000,
+    });
+
+// ─────────────────────────────────────────────
+// STATUS SEMUA NODE — loop semua cluster di DB
+// ─────────────────────────────────────────────
+
+export const getNodesStatus = async (): Promise<string> => {
+    const clusters = await getAllClusters();
+    if (!clusters.length) {
+        return '⚠️ Belum ada cluster Proxmox.\nTambahkan via menu *Proxmox → Kelola Cluster*.';
     }
+
+    const ADMIN    = process.env.ADMIN_NAME || 'Irvan';
+    const multi    = clusters.length > 1;
+    const sections: string[] = [];
+
+    for (const cluster of clusters) {
+        try {
+            const { data: { data: nodes } } = await pveGet(cluster, '/nodes');
+            const label = multi
+                ? `📊 Cluster: *${cluster.name}* (${cluster.host})\n`
+                : `📊 Status Cluster Proxmox:\n`;
+
+            let report = label;
+            for (const node of nodes) {
+                const { data: { data: s } } = await pveGet(cluster, `/nodes/${node.node}/status`);
+                const cpu    = (s.cpu * 100).toFixed(1);
+                const mUsed  = (s.memory.used  / 1024 ** 3).toFixed(2);
+                const mTotal = (s.memory.total / 1024 ** 3).toFixed(2);
+                const uptime = (s.uptime / 86400).toFixed(1);
+                const status = node.status === 'online' ? '✅ Online' : '🔴 Offline';
+
+                report += `\n🖥️ Node: ${node.node.toUpperCase()}\n`;
+                report += `├ Status: ${status}\n`;
+                report += `├ CPU: ${cpu}%\n`;
+                report += `├ RAM: ${mUsed} / ${mTotal} GB\n`;
+                report += `└ Uptime: ${uptime} hari\n`;
+            }
+            sections.push(report);
+        } catch (err: any) {
+            console.error(`PVE [${cluster.name}]:`, err.message);
+            sections.push(`❌ *${cluster.name}* (${cluster.host}): Tidak dapat dihubungi`);
+        }
+    }
+
+    return sections.join('\n\n') + `\n\nSemua cluster terpantau, Kak ${ADMIN}. 🛡️`;
+};
+
+// ─────────────────────────────────────────────
+// LIST SEMUA VM & LXC — semua cluster
+// ─────────────────────────────────────────────
+
+export const getResources = async (): Promise<PVEResource[]> => {
+    const clusters = await getAllClusters();
+    const all: PVEResource[] = [];
+
+    for (const cluster of clusters) {
+        try {
+            const { data: { data } } = await pveGet(cluster, '/cluster/resources?type=vm');
+            data.forEach((r: any) => all.push({
+                ...r,
+                clusterId:   cluster.id,
+                clusterName: cluster.name,
+            }));
+        } catch (err: any) {
+            console.error(`PVE [${cluster.name}] getResources:`, err.message);
+        }
+    }
+
+    return all;
 };
 
 // ─────────────────────────────────────────────
@@ -71,18 +207,32 @@ export const getResources = async (): Promise<any[]> => {
 // ─────────────────────────────────────────────
 
 export const controlResource = async (
-    vmid: number,
-    type: 'qemu' | 'lxc',
-    action: string,
-    node: string
+    vmid:      number,
+    type:      'qemu' | 'lxc',
+    action:    string,
+    node:      string,
+    clusterId: number,
 ): Promise<string> => {
+    const cluster = await getClusterById(clusterId);
+    if (!cluster) return `❌ Cluster ID ${clusterId} tidak ditemukan di database.`;
+
     try {
-        await pvePost(`/nodes/${node}/${type}/${vmid}/status/${action}`);
-
+        await pvePost(cluster, `/nodes/${node}/${type}/${vmid}/status/${action}`);
         const emoji: Record<string, string> = { start: '▶️', stop: '🛑', reboot: '🔄' };
-        return `${emoji[action] ?? '⚡'} Perintah ${action.toUpperCase()} untuk ${type.toUpperCase()} ID ${vmid} berhasil dikirim ke node ${node}.`;
-
+        return `${emoji[action] ?? '⚡'} ${action.toUpperCase()} untuk ${type.toUpperCase()} ID ${vmid} berhasil dikirim ke node ${node}.`;
     } catch (err: any) {
-        return `Gagal eksekusi: ${err.response?.data?.errors ?? err.message}`;
+        return `❌ Gagal: ${err.response?.data?.errors ?? err.message}`;
     }
+};
+
+export const PVEClusterService = {
+    getAllClusters,
+    getClusterById,
+    addCluster,
+    updateCluster,
+    removeCluster,
+    testClusterConnection,
+    getNodesStatus,
+    getResources,
+    controlResource,
 };

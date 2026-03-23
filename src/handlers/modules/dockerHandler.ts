@@ -1,4 +1,4 @@
-import { listContainers, controlContainer, getContainerLogs, getContainerStats } from '../../services/docker';
+import { listContainers, controlContainer, getContainerLogs, getContainerStats } from '../../services/docker.service';
 import { getAllAliases, getAliasFromDB } from '../../database/queries';
 
 // ─────────────────────────────────────────────
