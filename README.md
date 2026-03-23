@@ -67,6 +67,8 @@ Shorekeeper (SK) adalah AI asisten infrastruktur pribadi yang berjalan sebagai *
 - MariaDB 10.6+ / MySQL 8+
 - TypeScript 5.x (dev dependency)
 
+> Catatan: Panduan install ini baru diuji di Debian 12. OS/distro lain mungkin memerlukan penyesuaian paket dan path.
+
 ---
 
 ## 🚀 Instalasi & Jalankan (Step-by-step)
@@ -82,21 +84,41 @@ cd /opt/shorekeeper
 npm install
 ```
 
-3. Copy dan edit `.env`
+3. Install MariaDB (jika belum terpasang)
+```bash
+# Debian/Ubuntu
+sudo apt update && sudo apt install -y mariadb-server
+sudo systemctl enable --now mariadb
+
+# CentOS/RHEL
+sudo yum install -y mariadb-server
+sudo systemctl enable --now mariadb
+
+# Arch Linux
+sudo pacman -Syu mariadb
+sudo systemctl enable --now mariadb
+```
+
+4. Copy dan edit `.env`
 ```bash
 cp .env.example .env
 # Atur nilai di .env sesuai environment Anda
 ```
 
-4. Buat database
-```sql
+5. Buat database (via MySQL/MariaDB CLI)
+```bash
+# Masuk ke MySQL sebagai root (atau user admin lain)
+mysql -u root -p
+
+# setelah login, jalankan perintah SQL ini:
 CREATE DATABASE shorekeeper_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE USER 'shorekeeper'@'localhost' IDENTIFIED BY 'password_kuat';
 GRANT ALL PRIVILEGES ON shorekeeper_db.* TO 'shorekeeper'@'localhost';
 FLUSH PRIVILEGES;
+EXIT;
 ```
 
-5. Build TypeScript
+6. Build TypeScript
 ```bash
 npm run build
 ```
