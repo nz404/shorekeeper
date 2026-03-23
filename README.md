@@ -21,21 +21,19 @@
 
 Shorekeeper (SK) adalah AI asisten infrastruktur pribadi yang berjalan sebagai **Telegram bot** sekaligus **web dashboard**. SK memantau, menganalisis, dan membantu mengelola server secara real-time.
 
-> Catatan: Dokumentasi ini hanya mencakup pemasangan langsung aplikasi SK. *Bukan konfigurasi reverse proxy Nginx/HTTPS*.
 
 ### ✨ Fitur Utama
 
 - Monitoring CPU, RAM, Disk via SSH dengan alert otomatis
 - Proxmox: lihat status VM/LXC, start/stop/reboot
 - Docker: list container, start/stop/restart, lihat log
-- Ping monitor HTTP dan IP/port dengan notifikasi up/down
+- Ping monitor HTTP dan IP dengan notifikasi up/down
 - Auto-fix untuk beberapa kasus masalah umum
 - Laporan otomatis pagi & malam berbasis AI (Groq)
 - Reminder dan notes (tag, pencarian)
 - Uptime history dan grafik downtime
 - Web dashboard dengan Live2D, chat AI, quick action, command
-- Command chat (telebot): /ping /ssh /docker /proxmox /laporan /help
-- Keamanan dasar: brute-force protection, rate limiting per IP
+- Command chat (WEB CHAT): /ping /ssh /docker /proxmox /laporan /help
 
 ---
 
@@ -75,7 +73,7 @@ Shorekeeper (SK) adalah AI asisten infrastruktur pribadi yang berjalan sebagai *
 
 1. Clone repo
 ```bash
-git clone <repo_url> /opt/shorekeeper
+git clone https://github.com/nz404/shorekeeper.git /opt/shorekeeper
 cd /opt/shorekeeper
 ```
 
