@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shorekeeper</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body class="bg-dark">
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <h1>Shorekeeper</h1>
+  <p>SECURE ACCESS REQUIRED</p>
+  <input type="text"     id="un-input" placeholder="Username" autocomplete="username">
+  <input type="password" id="pw-input" placeholder="Password" autocomplete="current-password">
+  <button id="login-btn">MASUK</button>
+  <span id="login-err"></span>
+  <div id="demo-hint" style="margin-top:8px;padding:8px 14px;background:rgba(30,60,80,0.5);border:1px solid #1a3040;border-radius:8px;text-align:center">
+    <div style="font-size:10px;color:#3a6070;letter-spacing:1px;margin-bottom:4px">DEMO ACCESS</div>
+    <div style="font-size:12px;color:#4a8090">user: <b style="color:#7eb8d4">demo</b> · pass: <b style="color:#7eb8d4">demo</b></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <canvas id="cv"></canvas>
+  <div class="vignette"></div>
+
+  <!-- Toolbar -->
+  <div id="left-toolbar">
+    <button class="tool-btn" onclick="togglePanel('model-panel')" title="Model">⚙️</button>
+    <button class="tool-btn" onclick="togglePanel('bg-panel')"    title="Background">🎨</button>
+    <button class="tool-btn" id="theme-btn" onclick="toggleTheme()" title="Dark/Light">🌙</button>
+    <button class="tool-btn" onclick="toggleSidePanel()" title="Reminder & Catatan">📒</button>
+  </div>
+
+  <!-- Panel Model -->
+  <div id="model-panel" class="float-panel">
+    <h3>Pengaturan Model</h3>
+    <div class="setting-row">
+      <label>Skala</label>
+      <input type="range" id="s-scale" min="30" max="200" value="92"
+        oninput="updateModel('scale',this.value);document.getElementById('v-scale').textContent=this.value+'%'">
+      <span id="v-scale">92%</span>
+    </div>
+    <div class="setting-row">
+      <label>Posisi X</label>
+      <input type="range" id="s-x" min="-500" max="500" value="0"
+        oninput="updateModel('x',this.value);document.getElementById('v-x').textContent=this.value">
+      <span id="v-x">0</span>
+    </div>
+    <div class="setting-row">
+      <label>Posisi Y</label>
+      <input type="range" id="s-y" min="-300" max="300" value="0"
+        oninput="updateModel('y',this.value);document.getElementById('v-y').textContent=this.value">
+      <span id="v-y">0</span>
+    </div>
+    <hr class="panel-divider">
+    <button class="reset-btn" onclick="resetModel()">↺ Reset</button>
+  </div>
+
+  <!-- Panel Background -->
+  <div id="bg-panel" class="float-panel" style="top:60px">
+    <h3>Background</h3>
+    <div class="bg-grid">
+      <div class="bg-preset active" data-bg="dark"   onclick="setBg('dark',this)">🌑 Dark</div>
+      <div class="bg-preset"        data-bg="ocean"  onclick="setBg('ocean',this)">🌊 Ocean</div>
+      <div class="bg-preset"        data-bg="night"  onclick="setBg('night',this)">🌙 Night</div>
+      <div class="bg-preset"        data-bg="forest" onclick="setBg('forest',this)">🌿 Forest</div>
+    </div>
+    <hr class="panel-divider">
+    <div id="bg-color-row">
+      <label>Custom</label>
+      <input type="color" id="bg-color" value="#06090f" oninput="setBgColor(this.value)">
+    </div>
+    <hr class="panel-divider">
+    <input type="text" id="bg-url" placeholder="URL gambar..." style="width:100%;background:var(--bg-input);border:1px solid var(--border);color:var(--text-pri);padding:6px 10px;border-radius:7px;font-size:12px;outline:none;margin-bottom:6px">
+    <button class="apply-btn" onclick="setBgImage()">Terapkan Gambar</button>
+  </div>
+
+    <!-- Uptime History Panel -->
+  <div id="uptime-panel">
+    <div id="uptime-header">
+      <span>📊</span>
+      <h3>Uptime History</h3>
+      <div class="uptime-days">
+        <button class="uptime-day-btn active" data-days="7"  onclick="setUptimeDays(7,this)">7h</button>
+        <button class="uptime-day-btn"        data-days="30" onclick="setUptimeDays(30,this)">30h</button>
+      </div>
+      <button id="uptime-close" onclick="toggleUptimePanel()">✕</button>
+    </div>
+    <div id="uptime-body">
+      <div style="color:var(--text-muted);font-size:12px;padding:16px;text-align:center">SK sedang memuat data uptime...</div>
+    </div>
+  </div>
+
+  <!-- Docker Panel -->
+  <div id="docker-panel">
+    <div id="docker-header">
+      <span>🐳</span>
+      <h3>Docker & Uptime</h3>
+      <button id="docker-close" onclick="toggleDockerPanel()">✕</button>
+    </div>
+    <div style="padding:10px 10px 0;display:flex;gap:6px">
+      <select id="docker-server-select" onchange="loadDockerContainers(this.value)" style="flex:1">
+        <option value="">— Pilih Server —</option>
+      </select>
+      <button onclick="showUptimePanel()" style="background:var(--bg-btn);border:1px solid var(--border-hover);color:var(--accent);padding:0 10px;border-radius:7px;cursor:pointer;font-size:12px" title="Uptime History">📊</button>
+    </div>
+    <div id="docker-body">
+      <div style="color:var(--text-muted);font-size:13px;padding:10px">Pilih server untuk lihat container.</div>
+    </div>
+  </div>
+
+  <!-- SK Speech Bubble -->
+  <div id="sk-speech"></div>
+
+  <!-- Reminder & Notes Panel -->
+  <div id="side-panel" class="side-panel">
+    <div class="side-panel-header">
+      <span>📒</span>
+      <h3>Reminder & Catatan</h3>
+      <button class="side-panel-close" onclick="toggleSidePanel()">✕</button>
+    </div>
+    <div class="side-panel-body">
+      <!-- Tabs -->
+      <div class="sp-tabs">
+        <button class="sp-tab active" onclick="switchTab('reminder',this)">⏰ Reminder</button>
+        <button class="sp-tab" onclick="switchTab('notes',this)">📝 Catatan</button>
+      </div>
+
+      <!-- Tab Reminder -->
+      <div id="tab-reminder">
+        <div class="sp-form">
+          <input type="text" id="rem-title" placeholder="Pesan reminder...">
+          <input type="datetime-local" id="rem-datetime">
+          <select id="rem-repeat">
+            <option value="none">Sekali saja</option>
+            <option value="daily">Setiap hari</option>
+            <option value="weekly">Setiap minggu</option>
+          </select>
+          <button class="sp-submit" onclick="addReminderWeb()">➕ Tambah Reminder</button>
+        </div>
+        <div id="reminder-list"></div>
+
+        <!-- Setting Jadwal Laporan -->
+        <hr style="border:none;border-top:1px solid var(--border);margin:12px 0">
+        <div style="font-size:10px;color:var(--text-muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:8px">⏰ Jadwal Laporan Otomatis</div>
+        <div class="sp-form">
+          <label style="font-size:11px;color:var(--text-sec)">🌅 Laporan Pagi (WIB)</label>
+          <input type="time" id="sched-pagi"  value="09:00">
+          <label style="font-size:11px;color:var(--text-sec)">🌙 Laporan Malam (WIB)</label>
+          <input type="time" id="sched-malam" value="18:00">
+          <button class="sp-submit" id="sched-save-btn" onclick="saveReportSchedule()">Simpan Jadwal</button>
+        </div>
+      </div>
+
+      <!-- Tab Catatan -->
+      <div id="tab-notes" style="display:none">
+        <div class="sp-search">
+          <input type="text" id="note-search" placeholder="Cari catatan...">
+          <button onclick="searchNotesWeb()">🔍</button>
+        </div>
+        <div class="sp-tag-row">
+          <span class="sp-tag active" onclick="filterNotes('',this)">Semua</span>
+          <span class="sp-tag" onclick="filterNotes('server',this)">🖥️ Server</span>
+          <span class="sp-tag" onclick="filterNotes('config',this)">⚙️ Config</span>
+          <span class="sp-tag" onclick="filterNotes('network',this)">🌐 Network</span>
+          <span class="sp-tag" onclick="filterNotes('personal',this)">👤 Personal</span>
+        </div>
+        <div class="sp-form">
+          <input type="text"     id="note-title"   placeholder="Judul catatan...">
+          <textarea              id="note-content"  placeholder="Isi catatan..."></textarea>
+          <select id="note-tag">
+            <option value="general">📝 General</option>
+            <option value="server">🖥️ Server</option>
+            <option value="config">⚙️ Config</option>
+            <option value="network">🌐 Network</option>
+            <option value="personal">👤 Personal</option>
+          </select>
+          <button class="sp-submit" onclick="addNoteWeb()">+ Simpan Catatan</button>
+        </div>
+        <div id="notes-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Chat Panel -->
+  <div id="panel">
+    <div id="ph">
+      <div class="ico">🛡️</div>
+      <div>
+        <div class="name">SHOREKEEPER</div>
+        <div class="sub">Penjaga Mercusuar · Nz404</div>
+      </div>
+      <div id="dot"></div>
+      <button id="tts-toggle" onclick="toggleTTS()" title="Auto TTS">🔇</button>
+      <button id="logout-btn" onclick="logout()" title="Logout" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:14px;padding:4px">⏏️</button>
+    </div>
+
+    <div id="qa-panel">
+      <div id="qa-header" onclick="toggleQA()">
+        <div id="qa-title">Aksi Cepat</div>
+        <span id="qa-toggle-icon">▼</span>
+      </div>
+      <div id="qa-grid">
+        <button class="qa-btn" onclick="quickAction('status',this)">📊 Status</button>
+        <button class="qa-btn" onclick="quickAction('proxmox',this)">🏝️ Proxmox</button>
+        <button class="qa-btn" onclick="quickAction('monitor',this)">🖥️ Monitor</button>
+        <button class="qa-btn" onclick="quickAction('troubleshoot',this)">🔍 Troubleshoot</button>
+        <button class="qa-btn" onclick="quickAction('ssh',this)">🌐 SSH</button>
+        <button class="qa-btn" onclick="quickAction('laporan',this)">📋 Laporan</button>
+        <button class="qa-btn" onclick="toggleDockerPanel()" id="docker-qa-btn">🐳 Docker</button>
+        <button class="qa-btn" onclick="toggleUptimePanel()" id="uptime-qa-btn">📊 Uptime</button>
+      </div>
+    </div>
+
+    <div id="msgs">
+      <div class="m a">
+        <div class="sn">Shorekeeper</div>
+        Sistem telah aktif, Shorekeeper kembali bertugas mengawasi mercusuar.
+      </div>
+    </div>
+    <div id="typ"><span></span><span></span><span></span></div>
+
+    <div id="expbar">
+      <button class="expbtn" onclick="triggerExp('blush')"     title="Blush">😊</button>
+      <button class="expbtn" onclick="triggerExp('surprised')" title="Kaget">😮</button>
+      <button class="expbtn" onclick="triggerExp('confused')"  title="Bingung">🤔</button>
+      <button class="expbtn" onclick="triggerExp('heart')"     title="Heart">😍</button>
+      <button class="expbtn" onclick="triggerExp('star')"      title="Star">🌟</button>
+      <button class="expbtn" onclick="triggerExp('angry')"     title="Marah">😠</button>
+      <button class="expbtn" onclick="triggerExp('crying')"    title="Nangis">😢</button>
+      <button class="expbtn" onclick="triggerExp('cat')"       title="Cat">🐱</button>
+    </div>
+
+    <div id="inp-area">
+      <button id="mic-btn" onclick="toggleVoice()" title="Voice Input">🎤</button>
+      <textarea id="inp" placeholder="Kirim pesan... (atau /help)" rows="1" inputmode="text" autocomplete="off"></textarea>
+      <button id="sbtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="22" y1="2" x2="11" y2="13"/>
+          <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pixi.js@6/dist/browser/pixi.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pixi-live2d-display/dist/cubism4.min.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>
