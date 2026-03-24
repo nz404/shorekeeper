@@ -5,7 +5,7 @@ import { formatLocal, isTime } from '../config/timezone';
 import { getResources, getNodesStatus } from '../services/proxmox.service';
 import { sshExecSafe } from '../services/ssh.service';
 import { getAllAliases, getAliasFromDB, getMonitorServers, getSetting, setSetting } from '../database/queries';
-import { collectServerLogs, analyzeLogsWithAI, ServerLog } from './logAggregator';
+import { collectServerLogs, analyzeLogsWithAI, ServerLog } from './logAggregator.job';
 import { getUptimeHistory, calculateUptimePct, UptimeHistoryService } from '../services/uptimeHistory.service';
 
 // ─────────────────────────────────────────────

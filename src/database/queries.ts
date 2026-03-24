@@ -2,12 +2,14 @@ import { db } from './connection';
 
 // CHAT HISTORY
 
+/** Menyimpan pesan chat (user/assistant) ke database */
 export const saveChat = async (userId: number, role: 'user' | 'assistant', message: string) => {
     try {
         await db.execute('INSERT INTO chat_history (user_id, role, message) VALUES (?, ?, ?)', [userId, role, message]);
     } catch (e) { console.error('Gagal simpan chat:', e); }
 };
 
+/** Mengambil konteks chat terbaru (10 pesan) untuk user */
 export const getChatContext = async (userId: number) => {
     try {
         const [rows] = await db.execute(
@@ -18,6 +20,7 @@ export const getChatContext = async (userId: number) => {
     } catch (e) { console.error('Gagal ambil context:', e); return []; }
 };
 
+/** Mengambil chat berdasarkan tanggal tertentu untuk user */
 export const getChatByDate = async (userId: number, date: string) => {
     try {
         const [rows] = await db.execute(
@@ -28,6 +31,7 @@ export const getChatByDate = async (userId: number, date: string) => {
     } catch (e) { console.error('Gagal ambil chat tanggal:', e); return []; }
 };
 
+/** Menghapus semua chat history untuk user tertentu */
 export const clearChatHistory = async (userId: number): Promise<boolean> => {
     try {
         const [result]: any = await db.execute('DELETE FROM chat_history WHERE user_id = ?', [userId]);
@@ -35,6 +39,7 @@ export const clearChatHistory = async (userId: number): Promise<boolean> => {
     } catch (e) { console.error('Gagal clear chat:', e); return false; }
 };
 
+/** Mengambil semua chat history untuk user (untuk export) */
 export const getAllChatHistory = async (userId: number) => {
     try {
         const [rows] = await db.execute(
@@ -45,6 +50,7 @@ export const getAllChatHistory = async (userId: number) => {
     } catch (e) { console.error('Gagal export chat:', e); return []; }
 };
 
+/** Mengimpor chat history dari array data */
 export const importChatHistory = async (userId: number, chats: any[]) => {
     const conn = await db.getConnection();
     try {
@@ -63,6 +69,7 @@ export const importChatHistory = async (userId: number, chats: any[]) => {
 
 // ALIAS SSH
 
+/** Menambahkan alias SSH baru ke database */
 export const addAliasToDB = async (alias: string, host: string, port: number, user: string, pass: string) => {
     try {
         await db.execute(
@@ -73,6 +80,7 @@ export const addAliasToDB = async (alias: string, host: string, port: number, us
     } catch (e) { console.error('Gagal tambah alias:', e); return false; }
 };
 
+/** Mengambil detail alias SSH berdasarkan nama */
 export const getAliasFromDB = async (aliasName: string) => {
     try {
         const [rows]: any = await db.execute(
@@ -83,6 +91,7 @@ export const getAliasFromDB = async (aliasName: string) => {
     } catch (e) { console.error('Gagal ambil alias:', e); return null; }
 };
 
+/** Menghapus alias SSH dari database */
 export const removeAliasFromDB = async (alias: string): Promise<boolean> => {
     try {
         const [result]: any = await db.execute(
@@ -93,6 +102,7 @@ export const removeAliasFromDB = async (alias: string): Promise<boolean> => {
     } catch (e) { console.error('Gagal hapus alias:', e); return false; }
 };
 
+/** Mengambil semua alias SSH (hanya alias dan host) */
 export const getAllAliases = async () => {
     try {
         const [rows]: any = await db.execute('SELECT alias, host FROM server_aliases');
@@ -100,6 +110,7 @@ export const getAllAliases = async () => {
     } catch (e) { console.error('Gagal ambil aliases:', e); return []; }
 };
 
+/** Mengambil semua alias SSH lengkap (untuk backup) */
 export const getAllAliasesForBackup = async () => {
     try {
         const [rows] = await db.execute('SELECT alias, host, port, username, password FROM server_aliases');
@@ -107,6 +118,7 @@ export const getAllAliasesForBackup = async () => {
     } catch (e) { console.error('Gagal backup alias:', e); return []; }
 };
 
+/** Mengimpor alias SSH dari array data */
 export const importAliases = async (aliases: any[]) => {
     const conn = await db.getConnection();
     try {
@@ -125,6 +137,7 @@ export const importAliases = async (aliases: any[]) => {
 
 // MONITOR SERVERS
 
+/** Mengambil daftar alias server yang dimonitor */
 export const getMonitorServers = async (): Promise<string[]> => {
     try {
         const [rows]: any = await db.execute('SELECT alias FROM monitor_servers');
@@ -132,6 +145,7 @@ export const getMonitorServers = async (): Promise<string[]> => {
     } catch (e) { console.error('Gagal ambil monitor servers:', e); return []; }
 };
 
+/** Menambahkan server ke daftar monitor */
 export const addMonitorServer = async (alias: string): Promise<boolean> => {
     try {
         await db.execute('INSERT IGNORE INTO monitor_servers (alias) VALUES (?)', [alias]);
@@ -139,6 +153,7 @@ export const addMonitorServer = async (alias: string): Promise<boolean> => {
     } catch (e) { console.error('Gagal tambah monitor server:', e); return false; }
 };
 
+/** Menghapus server dari daftar monitor */
 export const removeMonitorServer = async (alias: string): Promise<boolean> => {
     try {
         const [result]: any = await db.execute('DELETE FROM monitor_servers WHERE alias = ?', [alias]);
@@ -148,6 +163,7 @@ export const removeMonitorServer = async (alias: string): Promise<boolean> => {
 
 // ── REMINDER ──
 
+/** Menambahkan reminder baru */
 export const addReminder = async (
     userId: number, message: string, remindAt: Date,
     repeatType: 'none' | 'daily' | 'weekly' = 'none'
@@ -161,6 +177,7 @@ export const addReminder = async (
     } catch (e) { console.error('addReminder error:', e); return null; }
 };
 
+/** Mengambil reminder yang sudah jatuh tempo */
 export const getDueReminders = async () => {
     try {
         const [rows]: any = await db.execute(
@@ -170,18 +187,21 @@ export const getDueReminders = async () => {
     } catch { return []; }
 };
 
+/** Memperbarui waktu reminder berikutnya */
 export const updateReminderTime = async (id: number, nextAt: Date) => {
     try {
         await db.execute('UPDATE reminders SET remind_at = ? WHERE id = ?', [nextAt, id]);
     } catch (e) { console.error('updateReminderTime error:', e); }
 };
 
+/** Menonaktifkan reminder */
 export const deactivateReminder = async (id: number) => {
     try {
         await db.execute('UPDATE reminders SET active = 0 WHERE id = ?', [id]);
     } catch (e) { console.error('deactivateReminder error:', e); }
 };
 
+/** Mengambil semua reminder aktif untuk user */
 export const getActiveReminders = async (userId: number) => {
     try {
         const [rows]: any = await db.execute(
@@ -192,6 +212,7 @@ export const getActiveReminders = async (userId: number) => {
     } catch { return []; }
 };
 
+/** Menghapus reminder berdasarkan ID dan user */
 export const deleteReminder = async (id: number, userId: number) => {
     try {
         const [result]: any = await db.execute(
@@ -204,6 +225,7 @@ export const deleteReminder = async (id: number, userId: number) => {
 
 // ── CATATAN ──
 
+/** Menambahkan catatan baru */
 export const addNote = async (
     userId: number, title: string, content: string, tag: string = 'general'
 ) => {
@@ -216,6 +238,7 @@ export const addNote = async (
     } catch (e) { console.error('addNote error:', e); return null; }
 };
 
+/** Mengambil catatan untuk user, opsional berdasarkan tag */
 export const getNotes = async (userId: number, tag?: string) => {
     try {
         const query = tag
@@ -226,6 +249,7 @@ export const getNotes = async (userId: number, tag?: string) => {
     } catch { return []; }
 };
 
+/** Mengambil catatan berdasarkan ID dan user */
 export const getNoteById = async (id: number, userId: number) => {
     try {
         const [rows]: any = await db.execute(
@@ -236,6 +260,7 @@ export const getNoteById = async (id: number, userId: number) => {
     } catch { return null; }
 };
 
+/** Mencari catatan berdasarkan keyword di title atau content */
 export const searchNotes = async (userId: number, keyword: string) => {
     try {
         const [rows]: any = await db.execute(
@@ -246,6 +271,7 @@ export const searchNotes = async (userId: number, keyword: string) => {
     } catch { return []; }
 };
 
+/** Menghapus catatan berdasarkan ID dan user */
 export const deleteNote = async (id: number, userId: number) => {
     try {
         const [result]: any = await db.execute(
@@ -258,6 +284,7 @@ export const deleteNote = async (id: number, userId: number) => {
 
 // SETTINGS — simpan konfigurasi dinamis
 
+/** Mengambil nilai setting berdasarkan key */
 export const getSetting = async (key: string): Promise<string | null> => {
     try {
         const [rows]: any = await db.execute(
@@ -267,6 +294,7 @@ export const getSetting = async (key: string): Promise<string | null> => {
     } catch { return null; }
 };
 
+/** Menyimpan atau memperbarui nilai setting */
 export const setSetting = async (key: string, value: string): Promise<boolean> => {
     try {
         await db.execute(

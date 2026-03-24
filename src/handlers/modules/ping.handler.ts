@@ -1,4 +1,4 @@
-import { getPingTargets, addPingTarget, removePingTarget, getPingStatus, checkTarget } from '../../jobs/pingMonitor';
+import { getPingTargets, addPingTarget, removePingTarget, getPingStatus, checkTarget } from '../../jobs/pingMonitor.job';
 
 // ─────────────────────────────────────────────
 // SAFE EDIT
@@ -82,7 +82,7 @@ export const handleAddPingTarget = async (ctx: any, type: 'http' | 'ip', input: 
     if (!id) return ctx.reply('❌ Gagal menambahkan target.');
 
     // Langsung cek status awal tanpa trigger alert
-    const { initTargetStatus } = await import('../../jobs/pingMonitor');
+    const { initTargetStatus } = await import('../../jobs/pingMonitor.job');
     const isUp = await initTargetStatus(id, type, target);
 
     const typeIcon  = type === 'http' ? '🌐' : '📡';

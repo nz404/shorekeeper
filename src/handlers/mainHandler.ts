@@ -2,27 +2,27 @@ import * as dotenv from 'dotenv';
 dotenv.config();
 
 import { Telegraf } from 'telegraf';
-import { handleAIChat } from './modules/ai';
+import { handleAIChat } from './modules/ai.handler';
 import {
     handleManagePulau, handleCheckStatus, handleProxmoxAction,
     handleProxmoxMenu, showAddClusterPrompt,
     showDeleteClusterMenu, handleDeleteCluster,
     handlePveWizardStep,
-} from './modules/proxmox';
-import { handleSSHWizard, resetSessionTimeout } from './modules/ssh';
-import { handleLocalTerminal } from './modules/terminal';
-import { showTroubleshootMenu, showKategoriMenu, handleTroubleshoot, KATEGORI_LIST } from './modules/troubleshoot';
-import { showMonitorMenu, handleMonitorAction } from '../jobs/monitor';
-import { showDockerMenu, showContainerList, showContainerInfo, handleContainerAction, showContainerLogs, showContainerStats } from './modules/dockerHandler';
-import { showPingMenu, showPingAddPrompt, handleAddPingTarget, handleDeletePingTarget, checkPingNow } from './modules/pingHandler';
+} from './modules/proxmox.handler';
+import { handleSSHWizard, resetSessionTimeout } from './modules/ssh.handler';
+import { handleLocalTerminal } from './modules/terminal.handler';
+import { showTroubleshootMenu, showKategoriMenu, handleTroubleshoot, KATEGORI_LIST } from './modules/troubleshoot.handler';
+import { showMonitorMenu, handleMonitorAction } from '../jobs/monitor.job';
+import { showDockerMenu, showContainerList, showContainerInfo, handleContainerAction, showContainerLogs, showContainerStats } from './modules/docker.handler';
+import { showPingMenu, showPingAddPrompt, handleAddPingTarget, handleDeletePingTarget, checkPingNow } from './modules/ping.handler';
 import { approveFix, rejectFix, AutoFixService } from '../services/autoFix.service';
 import {
     showReminderMenu, showReminderAddStep1, showReminderAddStep2, showReminderAddStep3,
     resolveReminderTime, saveReminder, handleDeleteReminder, handleAddReminder,
     showNotesMenu, showNoteAddPrompt, showNoteDetail, handleDeleteNote, handleSearchNotes, handleAddNote,
     showLaporanSchedule, showSchedulePicker, handleSetSchedule,
-} from './modules/reminderHandler';
-import { buildDailyReport } from '../jobs/reporter';
+} from './modules/reminder.handler';
+import { buildDailyReport } from '../jobs/reporter.job';
 import { TEKS } from '../config/persona';
 import {
     getAliasFromDB, addAliasToDB, getAllAliases, removeAliasFromDB,
@@ -284,7 +284,7 @@ export const registerHandlers = (bot: Telegraf, MY_CHAT_ID: string) => {
 
         if (data === 'laporan_schedule') {
             await ack(ctx);
-            const { showLaporanSchedule } = await import('./modules/reminderHandler');
+            const { showLaporanSchedule } = await import('./modules/reminder.handler');
             return showLaporanSchedule(ctx);
         }
 
@@ -294,19 +294,19 @@ export const registerHandlers = (bot: Telegraf, MY_CHAT_ID: string) => {
             const session = parts[2] as 'pagi' | 'malam';
             const hour    = parseInt(parts[3]);
             const minute  = parseInt(parts[4]);
-            const { handleSetSchedule } = await import('./modules/reminderHandler');
+            const { handleSetSchedule } = await import('./modules/reminder.handler');
             return handleSetSchedule(ctx, session, hour, minute);
         }
 
         if (data === 'sched_pagi') {
             await ack(ctx);
-            const { showSchedulePicker } = await import('./modules/reminderHandler');
+            const { showSchedulePicker } = await import('./modules/reminder.handler');
             return showSchedulePicker(ctx, 'pagi');
         }
 
         if (data === 'sched_malam') {
             await ack(ctx);
-            const { showSchedulePicker } = await import('./modules/reminderHandler');
+            const { showSchedulePicker } = await import('./modules/reminder.handler');
             return showSchedulePicker(ctx, 'malam');
         }
 
@@ -489,7 +489,7 @@ export const registerHandlers = (bot: Telegraf, MY_CHAT_ID: string) => {
 
         // D. Wizard reminder — custom time
         if (session?.step === 'rem_add_time_custom') {
-            const { parseReminderText } = await import('../jobs/reminder');
+            const { parseReminderText } = await import('../jobs/reminder.job');
             const result = parseReminderText(userInput);
             if (!result.valid) {
                 return ctx.reply(

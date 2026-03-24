@@ -3,10 +3,10 @@ dotenv.config();
 
 import { Telegraf } from 'telegraf';
 import { db } from '../database/connection';
-import { initMonitorJob } from '../jobs/monitor';
-import { initReporterJob } from '../jobs/reporter';
-import { initReminderJob } from '../jobs/reminder';
-import { initPingMonitorJob } from '../jobs/pingMonitor';
+import { initMonitorJob } from '../jobs/monitor.job';
+import { initReporterJob } from '../jobs/reporter.job';
+import { initReminderJob } from '../jobs/reminder.job';
+import { initPingMonitorJob } from '../jobs/pingMonitor.job';
 import { initWebServer } from '../web/webServer';
 import { registerHandlers } from '../handlers/mainHandler';
 

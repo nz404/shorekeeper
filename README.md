@@ -1,6 +1,6 @@
 ﻿<div align="center">
 
-# 🛡️ Shorekeeper
+# 🛡️ Shorekeeper Project
 
 **AI Homelab Infrastructure Assistant**
 
@@ -12,6 +12,12 @@
 [![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)](https://mariadb.org)
 [![Groq](https://img.shields.io/badge/AI-Groq_API-F55036?style=flat-square)](https://groq.com)
 [![Telegram](https://img.shields.io/badge/Telegram-Bot-26A5E4?style=flat-square&logo=telegram&logoColor=white)](https://core.telegram.org/bots)
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/nz404/shorekeeper/main/public/model/preview.jpg" alt="Shorekeeper Preview" width="600">
+  <br>
+  <i>"A container of souls to protect and monitor your digital world."</i>
+</p>
 
 </div>
 

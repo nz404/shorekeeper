@@ -1,10 +1,10 @@
-import { parseReminderText, formatWaktu } from '../../jobs/reminder';
+import { parseReminderText, formatWaktu } from '../../jobs/reminder.job';
 import {
     addReminder, getActiveReminders, deleteReminder,
     addNote, getNotes, getNoteById, searchNotes, deleteNote,
     getSetting, setSetting,
 } from '../../database/queries';
-import { updateReportSchedule, getReportSchedule } from '../../jobs/reporter';
+import { updateReportSchedule, getReportSchedule } from '../../jobs/reporter.job';
 import { nowLocal } from '../../config/timezone';
 
 // ─────────────────────────────────────────────

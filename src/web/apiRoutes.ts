@@ -8,7 +8,7 @@ import {
     addNote, getNotes, getNoteById, searchNotes, deleteNote,
 } from '../database/queries';
 import { db } from '../database/connection';
-import { getReportSchedule, updateReportSchedule } from '../jobs/reporter';
+import { getReportSchedule, updateReportSchedule } from '../jobs/reporter.job';
 import { getCurrentMood, getMoodEmoji } from '../config/mood';
 import { getUptimeSummary, getUptimeHistory, calculateUptimePct, UptimeHistoryService } from '../services/uptimeHistory.service';
 import { listContainers, controlContainer, getContainerLogs, DockerService } from '../services/docker.service';

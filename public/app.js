@@ -711,12 +711,11 @@ const clickResponses = {
         { expr: 'blush',     motion: 'Idle',  msg: 'H-hmph! Jangan sembarangan menyentuh kepala SK!' },
         { expr: 'blush',     motion: 'DaiJi', msg: 'B-bukan berarti SK senang ya...' },
         { expr: 'surprised', motion: 'Idle',  msg: '...!' },
-        { expr: 'blush',     motion: 'DaiJi', msg: 'J-jangan salah paham, ini bukan undangan.' },
     ],
     body: [
         { expr: 'heart',     motion: 'DaiJi', msg: 'Shorekeeper siap bertugas, Kak.' },
         { expr: 'star',      motion: 'Idle',  msg: 'Ada yang perlu SK bantu?' },
-        { expr: 'blush',     motion: 'DaiJi', msg: '...SK sedang sibuk memantau mercusuar.' },
+        { expr: 'blush',     motion: 'DaiJi', msg: '...SK sedang sibuk memantau node.' },
     ],
     area: [
         { expr: 'surprised', motion: 'Idle',  msg: '!' },
