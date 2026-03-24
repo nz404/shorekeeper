@@ -16,7 +16,7 @@
 <p align="center">
   <img src="public/model/preview.jpg" alt="Shorekeeper Preview" width="600">
   <br>
-  <i>"A container of souls to protect and monitor your digital world."</i>
+  <i>"The silent guardian of your infrastructure, weaving safety within the flow of data."</i>
 </p>
 
 </div>
