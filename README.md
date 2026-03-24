@@ -14,7 +14,7 @@
 [![Telegram](https://img.shields.io/badge/Telegram-Bot-26A5E4?style=flat-square&logo=telegram&logoColor=white)](https://core.telegram.org/bots)
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/nz404/shorekeeper/main/public/model/preview.jpg" alt="Shorekeeper Preview" width="600">
+  <img src="public/model/preview.jpg" alt="Shorekeeper Preview" width="600">
   <br>
   <i>"A container of souls to protect and monitor your digital world."</i>
 </p>
