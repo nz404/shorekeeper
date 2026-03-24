@@ -43,29 +43,6 @@ Shorekeeper (SK) adalah AI asisten infrastruktur pribadi yang berjalan sebagai *
 
 ---
 
-## 📁 Struktur Folder
-
-```
-/opt/shorekeeper/
-├── src/
-│   ├── app/                  # Entry point (index.ts)
-│   ├── config/               # persona.ts, mood.ts, timezone.ts
-│   ├── database/             # connection.ts, queries.ts
-│   ├── handlers/             # mainHandler + modules
-│   ├── jobs/                 # monitor, reporter, reminder, etc.
-│   ├── services/             # ai, docker, proxmox, ssh, uptimeHistory
-│   └── web/                  # webServer.ts, apiRoutes.ts, wsHandler.ts, authMiddleware.ts
-├── public/                   # web client static (index.html, app.js, style.css, model/)
-├── logs/                     # PM2 logs
-├── .env                      # Konfigurasi
-├── .env.example              # Template konfigurasi
-├── ecosystem.config.js       # PM2 setup
-├── package.json
-└── tsconfig.json
-```
-
----
-
 ## ⚙️ Requirements
 
 - Node.js 18.x LTS atau lebih baru
@@ -92,16 +69,7 @@ npm install
 
 3. Install MariaDB (jika belum terpasang)
 ```bash
-# Debian/Ubuntu
 sudo apt update && sudo apt install -y mariadb-server
-sudo systemctl enable --now mariadb
-
-# CentOS/RHEL
-sudo yum install -y mariadb-server
-sudo systemctl enable --now mariadb
-
-# Arch Linux
-sudo pacman -Syu mariadb
 sudo systemctl enable --now mariadb
 ```
 
@@ -145,22 +113,7 @@ pm2 logs shorekeeper
 
 ---
 
-## 🔧 Konfigurasi .env (Contoh)
-
-- TELEGRAM_TOKEN
-- MY_CHAT_ID
-- ADMIN_NAME
-- GROQ_API_KEY
-- GROQ_MODEL
-- DB_HOST
-- DB_USER
-- DB_PASSWORD
-- DB_NAME
-- WEB_PORT, WEB_ADMIN_USER, WEB_PASSWORD, WEB_GUEST_USER, WEB_GUEST_PASSWORD
-- TIMEZONE, MONITOR_CPU_THRESHOLD, MONITOR_RAM_THRESHOLD, MONITOR_DISK_THRESHOLD
-- MONITOR_INTERVAL_MS, SSH_SESSION_TIMEOUT_MS, SSH_CMD_TIMEOUT_MS, SSH_LONG_TIMEOUT_MS
-
-## 🗄️ Konfigurasi Proxmox
+## 🗄️ Menambahkan Proxmox untuk di Monitor
 
 Di versi ini, setup Proxmox sudah ada di menu Telegram dan web dashboard.
 
@@ -191,3 +144,7 @@ Di versi ini, setup Proxmox sudah ada di menu Telegram dan web dashboard.
 - `/ssh [alias] [cmd]`
 - `/docker [alias]`
 - `/laporan`
+
+<div align="center">
+<sub>Project Shorekeeper - Developed by <a href="https://www.google.com/search?q=nz404">nz404</a></sub>
+</div>
