@@ -148,5 +148,5 @@ Di versi ini, setup Proxmox sudah ada di menu Telegram dan web dashboard.
 ---
 
 <div align="center">
-Project Shorekeeper - Developed by <a href="https://nz404.my.id">Nz404</a>
+Shorekeeper Project - Developed by <a href="https://nz404.my.id">Nz404</a>
 </div>
