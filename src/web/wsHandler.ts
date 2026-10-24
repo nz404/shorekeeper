@@ -1,7 +1,7 @@
 import { WebSocketServer, WebSocket } from 'ws';
-import OpenAI from 'openai';
-import { SHOREKEEPER_PROMPT } from '../config/persona';
-import { getCurrentMood, getMoodEmoji, PRAISE_KEYWORDS } from '../config/mood';
+import { AI_MODEL, openai } from '../services/ai.service';
+import { removeEmoji, SHOREKEEPER_PROMPT } from '../config/persona';
+import { getCurrentMood, getMoodLabel, PRAISE_KEYWORDS } from '../config/mood';
 import { saveChat, getChatContext, getAllAliases, getAliasFromDB } from '../database/queries';
 import { getNodesStatus, getResources } from '../services/proxmox.service';
 import { buildFullReport } from '../jobs/monitor.job';
@@ -10,17 +10,8 @@ import { localHour } from '../config/timezone';
 import { runRemoteSSH, SSHService } from '../services/ssh.service';
 import { listContainers, DockerService } from '../services/docker.service';
 import {
-    sessions, checkGuestLimit, incrementGuestCount, GUEST_LIMIT,
+    getSession,
 } from './authMiddleware';
-
-// ─────────────────────────────────────────────
-// GROQ CLIENT
-// ─────────────────────────────────────────────
-
-const openai = new OpenAI({
-    apiKey:  process.env.GROQ_API_KEY,
-    baseURL: 'https://api.groq.com/openai/v1',
-});
 
 const ADMIN_NAME = () => process.env.ADMIN_NAME || 'Irvan';
 
@@ -31,12 +22,11 @@ const ADMIN_NAME = () => process.env.ADMIN_NAME || 'Irvan';
 const detectExpression = (text: string): string => {
     const t = text.toLowerCase();
     if (/gagal|error|anomali|masalah|rusak|down|offline/.test(t))          return 'surprised';
-    if (/maaf|mohon maaf|aduh|khawatir/.test(t))                           return 'blush';
+    if (/maaf|mohon maaf|aduh|khawatir/.test(t))                           return 'confused';
     if (/tidak yakin|mungkin|sepertinya|belum pasti/.test(t))              return 'confused';
     if (/berhasil|aman|stabil|aktif|online|normal|lancar|selesai/.test(t)) return 'heart';
-    if (/waspada|peringatan|alert|threshold|hati-hati/.test(t))            return 'angry';
+    if (/waspada|peringatan|alert|threshold|hati-hati/.test(t))            return 'surprised';
     if (/laporan|status|summary|hasil|data|cpu|ram|disk/.test(t))          return 'star';
-    if (/b-bukan|h-hmph|j-jangan salah paham/.test(t))                    return 'blush';
     return '';
 };
 
@@ -48,12 +38,12 @@ const broadcastMood = (
     wss: WebSocketServer,
     mood: string,
     expression: string,
-    emoji: string,
+    label: string,
     reason: string
 ) => {
     wss.clients.forEach((client: WebSocket) => {
-        if (client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify({ type: 'mood_update', mood, expression, emoji, reason }));
+        if (client.readyState === WebSocket.OPEN && (client as any).shorekeeperAuthenticated) {
+            client.send(JSON.stringify({ type: 'mood_update', mood, expression, label, reason }));
         }
     });
 };
@@ -177,6 +167,9 @@ export const initWebSocket = (wss: WebSocketServer) => {
         let authenticated = false;
         let webUserId     = parseInt(process.env.MY_CHAT_ID || '0');
         let sessionToken  = '';
+        const authTimeout = setTimeout(() => {
+            if (!authenticated) ws.close(1008, 'Authentication required');
+        }, 10_000);
 
         ws.on('message', async (raw) => {
             try {
@@ -184,7 +177,9 @@ export const initWebSocket = (wss: WebSocketServer) => {
 
                 // ── AUTH ──
                 if (msg.type === 'auth') {
-                    const session = sessions.get(msg.token);
+                    const session = typeof msg.token === 'string'
+                        ? getSession(`Bearer ${msg.token}`)
+                        : null;
                     if (!session) {
                         ws.send(JSON.stringify({ type: 'auth', ok: false }));
                         ws.close();
@@ -192,26 +187,25 @@ export const initWebSocket = (wss: WebSocketServer) => {
                     }
 
                     authenticated = true;
+                    clearTimeout(authTimeout);
+                    (ws as any).shorekeeperAuthenticated = true;
                     sessionToken  = msg.token;
-                    const isAdmin = session.role === 'admin';
                     const name    = ADMIN_NAME();
 
-                    webUserId = isAdmin ? parseInt(process.env.MY_CHAT_ID || '0') : 0;
+                    webUserId = parseInt(process.env.MY_CHAT_ID || '0');
 
-                    const greeting = isAdmin
-                        ? `Shorekeeper terhubung. Selamat datang kembali, Kak ${name}.`
-                        : `Halo! Kamu sedang dalam mode demo. Kamu bisa chat ${GUEST_LIMIT} kali per hari.`;
+                    const greeting = `Shorekeeper terhubung. Selamat datang kembali, Kak ${name}.`;
 
                     const mood = getCurrentMood();
                     ws.send(JSON.stringify({
                         type:       'auth',
                         ok:         true,
-                        role:       session.role,
+                        role:       'admin',
                         message:    greeting,
                         mood:       mood.mood,
                         expression: mood.expression,
-                        moodEmoji:  getMoodEmoji(mood.mood),
-                        adminName:  isAdmin ? name : null,
+                        moodLabel:  getMoodLabel(mood.mood),
+                        adminName:  name,
                     }));
                     return;
                 }
@@ -221,7 +215,7 @@ export const initWebSocket = (wss: WebSocketServer) => {
                     return;
                 }
 
-                const chatSession = sessions.get(sessionToken);
+                const chatSession = getSession(`Bearer ${sessionToken}`);
                 if (!chatSession) {
                     ws.send(JSON.stringify({ type: 'error', message: 'Sesi tidak valid.' }));
                     return;
@@ -229,14 +223,6 @@ export const initWebSocket = (wss: WebSocketServer) => {
 
                 // ── ACTION (tombol quick action, admin only) ──
                 if (msg.type === 'action') {
-                    if (chatSession.role !== 'admin') {
-                        ws.send(JSON.stringify({
-                            type: 'chat', role: 'assistant',
-                            content: 'Maaf, fitur ini hanya tersedia untuk admin.',
-                        }));
-                        return;
-                    }
-
                     ws.send(JSON.stringify({ type: 'typing', status: true }));
                     let result = '';
                     try {
@@ -277,28 +263,14 @@ export const initWebSocket = (wss: WebSocketServer) => {
                         return;
                     }
 
-                    // ── GUEST LIMIT ──
-                    if (chatSession.role === 'guest') {
-                        const check = checkGuestLimit(chatSession.username);
-                        if (!check.allowed) {
-                            ws.send(JSON.stringify({
-                                type: 'chat', role: 'assistant',
-                                content: `Maaf, kamu sudah mencapai batas ${GUEST_LIMIT} pesan per hari untuk mode demo. Coba lagi besok!`,
-                            }));
-                            return;
-                        }
-                        incrementGuestCount(chatSession.username);
-                        ws.send(JSON.stringify({ type: 'guest_info', remaining: check.remaining - 1, limit: GUEST_LIMIT }));
-                    }
-
                     // ── DETEKSI PUJIAN → MOOD MALU (admin only) ──
                     if (chatSession.role === 'admin') {
                         const isPraise = PRAISE_KEYWORDS.some((kw: string) => userInput.toLowerCase().includes(kw));
                         if (isPraise) {
-                            broadcastMood(wss, 'malu', 'blush', '😳', 'B-bukan berarti SK senang dipuji ya!');
+                            broadcastMood(wss, 'hangat', 'heart', 'Hangat', 'Saya senang bisa membantu, Kak.');
                             setTimeout(() => {
                                 const cur = getCurrentMood();
-                                broadcastMood(wss, cur.mood, cur.expression, getMoodEmoji(cur.mood), cur.reason);
+                                broadcastMood(wss, cur.mood, cur.expression, getMoodLabel(cur.mood), cur.reason);
                             }, 10_000);
                         }
                     }
@@ -307,30 +279,27 @@ export const initWebSocket = (wss: WebSocketServer) => {
                     ws.send(JSON.stringify({ type: 'typing', status: true }));
 
                     const history   = await getChatContext(webUserId);
-                    const isAdmin   = chatSession.role === 'admin';
                     const name      = ADMIN_NAME();
-                    const sysPrompt = isAdmin
-                        ? SHOREKEEPER_PROMPT
-                        : `${SHOREKEEPER_PROMPT}\n\nCATATAN PENTING: Kamu sedang berbicara dengan tamu demo, BUKAN Kak ${name}. JANGAN panggil nama admin. Panggil "Kak" saja. JANGAN bocorkan info server, IP, VM, container, Proxmox, credential, atau data teknis apapun. Tetap ramah dan sopan.`;
 
                     const messages = [
-                        { role: 'system', content: sysPrompt },
+                        { role: 'system', content: SHOREKEEPER_PROMPT },
                         ...history.map((h: any) => ({ role: h.role, content: h.message })),
                         { role: 'user',   content: userInput },
                     ];
 
                     const completion = await openai.chat.completions.create({
-                        model:      process.env.GROQ_MODEL || 'llama-3.3-70b-versatile',
+                        model:      AI_MODEL,
                         messages:   messages as any,
                         max_tokens: 1024,
                     });
 
-                    const reply = completion.choices[0]?.message?.content || 'SK sedang kehilangan sinyal...';
+                    const reply = removeEmoji(
+                        completion.choices[0]?.message?.content
+                        || 'SK sedang mengalami gangguan koneksi. Silakan coba kembali sebentar lagi.',
+                    );
 
-                    if (isAdmin) {
-                        await saveChat(webUserId, 'user', userInput);
-                        await saveChat(webUserId, 'assistant', reply);
-                    }
+                    await saveChat(webUserId, 'user', userInput);
+                    await saveChat(webUserId, 'assistant', reply);
 
                     const expression = detectExpression(reply);
                     ws.send(JSON.stringify({ type: 'typing', status: false }));
@@ -343,6 +312,7 @@ export const initWebSocket = (wss: WebSocketServer) => {
             }
         });
 
+        ws.on('close', () => clearTimeout(authTimeout));
         ws.on('error', (err) => console.error('WS connection error:', err.message));
     });
 };

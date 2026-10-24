@@ -12,6 +12,7 @@ import { TEKS, wrapWithSKVoice } from '../config/persona';
 import { createPendingFix, AutoFixService } from '../services/autoFix.service';
 import { updateMood, ServerStatus } from '../config/mood';
 import { recordUptimeEvent, initServerStatus, UptimeHistoryService } from '../services/uptimeHistory.service';
+import { sendAlertToSubscribers } from '../services/alert.service';
 
 // ─────────────────────────────────────────────
 // SAFE EDIT — fallback ke reply jika gagal (bukan rekursif!)
@@ -246,15 +247,15 @@ export const initMonitorJob = (bot: Telegraf, chatId: string) => {
                 const status = res.status;
 
                 if (lastProxmoxStatus[id] === 'running' && status === 'stopped') {
-                    bot.telegram.sendMessage(chatId,
+                    await sendAlertToSubscribers(bot,
                         `⚠️ *VM/LXC ${res.name}* (ID: ${id}) offline!`,
-                        { parse_mode: 'Markdown' }
+                        'Markdown',
                     );
                     await recordUptimeEvent(res.name, false);
                 } else if (lastProxmoxStatus[id] === 'stopped' && status === 'running') {
-                    bot.telegram.sendMessage(chatId,
+                    await sendAlertToSubscribers(bot,
                         `✅ *VM/LXC ${res.name}* (ID: ${id}) online kembali!`,
-                        { parse_mode: 'Markdown' }
+                        'Markdown',
                     );
                     await recordUptimeEvent(res.name, true);
                 }
@@ -295,7 +296,7 @@ export const initMonitorJob = (bot: Telegraf, chatId: string) => {
             updateMood(serverStatuses);
 
             const alertMsg = await buildAlertMessage(results);
-            if (alertMsg) await bot.telegram.sendMessage(chatId, alertMsg);
+            if (alertMsg) await sendAlertToSubscribers(bot, alertMsg);
 
             // Trigger auto-fix untuk masalah yang terdeteksi
             for (const m of results) {

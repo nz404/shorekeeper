@@ -1,4 +1,5 @@
-import { getPingTargets, addPingTarget, removePingTarget, getPingStatus, checkTarget } from '../../jobs/pingMonitor.job';
+import { getPingTargets, addPingTarget, updatePingTarget, removePingTarget, getPingStatus, checkTarget } from '../../jobs/pingMonitor.job';
+import { inputControls } from '../inputControls';
 
 // ─────────────────────────────────────────────
 // SAFE EDIT
@@ -33,10 +34,10 @@ export const showPingMenu = async (ctx: any) => {
         });
     }
 
-    const delButtons = targets.map((t: any) => ([{
-        text:          `🗑️ Hapus ${t.name}`,
-        callback_data: `ping_del_${t.id}`,
-    }]));
+    const targetButtons = targets.map((t: any) => ([
+        { text: `✏️ ${t.name}`, callback_data: `ping_edit_${t.id}` },
+        { text: '🗑️', callback_data: `ping_del_${t.id}` },
+    ]));
 
     return safeEdit(ctx, text, {
         parse_mode: 'Markdown',
@@ -47,7 +48,7 @@ export const showPingMenu = async (ctx: any) => {
                     { text: '➕ IP/Host',   callback_data: 'ping_add_ip'   },
                 ],
                 [{ text: '🔄 Cek Sekarang', callback_data: 'ping_check_now' }],
-                ...delButtons,
+                ...targetButtons,
                 [{ text: '⬅️ Kembali', callback_data: 'back_to_help' }],
             ],
         },
@@ -66,7 +67,7 @@ export const showPingAddPrompt = async (ctx: any, type: 'http' | 'ip') => {
 
     return safeEdit(ctx, `➕ *Tambah Monitor ${type.toUpperCase()}*\n\n${examples[type]}`, {
         parse_mode: 'Markdown',
-        reply_markup: { inline_keyboard: [[{ text: '❌ Batal', callback_data: 'menu_ping' }]] }
+        reply_markup: inputControls('menu_ping'),
     });
 };
 
@@ -74,7 +75,10 @@ export const handleAddPingTarget = async (ctx: any, type: 'http' | 'ip', input: 
     const parts = input.split('|').map(s => s.trim());
 
     if (parts.length < 2) {
-        return ctx.reply(`❌ Format salah.`, { parse_mode: 'Markdown' });
+        return ctx.reply(`❌ Format salah.`, {
+            parse_mode: 'Markdown',
+            reply_markup: inputControls('menu_ping'),
+        });
     }
 
     const [name, target] = parts;
@@ -91,6 +95,33 @@ export const handleAddPingTarget = async (ctx: any, type: 'http' | 'ip', input: 
         `✅ Monitor ${type.toUpperCase()} ditambahkan!\n\n${statusIcon} ${typeIcon} *${name}*\n\`${target}\`\n\nStatus saat ini: ${isUp ? 'UP' : 'DOWN'}`,
         { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: '📡 Lihat Monitor', callback_data: 'menu_ping' }]] } }
     );
+};
+
+export const handleEditPingTarget = async (ctx: any, id: number, input: string): Promise<boolean> => {
+    const [name, target, ...extra] = input.split('|').map(value => value.trim());
+    if (!name || !target || extra.length) {
+        await ctx.reply('Format edit: `nama baru | URL/IP baru`', {
+            parse_mode: 'Markdown',
+            reply_markup: inputControls('menu_ping'),
+        });
+        return false;
+    }
+    const ok = await updatePingTarget(id, name, target);
+    if (!ok) {
+        await ctx.reply('❌ Target tidak ditemukan atau gagal diperbarui.');
+        return false;
+    }
+    await showPingMenu(ctx);
+    return true;
+};
+
+export const showPingEditPrompt = async (ctx: any, id: number) => {
+    const target = (await getPingTargets()).find(item => Number(item.id) === id);
+    if (!target) return ctx.reply('❌ Target tidak ditemukan.');
+    return safeEdit(ctx, `✏️ *Edit ${target.type.toUpperCase()}*\n\nKirim data baru dengan format:\n\`nama baru | ${target.type === 'http' ? 'URL baru' : 'IP/host baru'}\``, {
+        parse_mode: 'Markdown',
+        reply_markup: inputControls('menu_ping'),
+    });
 };
 
 export const handleDeletePingTarget = async (ctx: any, targetId: number) => {

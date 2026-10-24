@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import fetch2 from 'node-fetch';
-import { sessions, requireAuth, requireAdmin, checkGuestLimit, GUEST_LIMIT, createSession,
-    checkLoginAttempt, recordFailedLogin, resetLoginAttempt } from './authMiddleware';
+import { getSession, sessions, requireAuth, requireAdmin, createSession,
+    checkLoginAttempt, recordFailedLogin, resetLoginAttempt, matchesCredential } from './authMiddleware';
 import {
     saveChat, getChatContext, getAllAliases, getAliasFromDB,
     addReminder, getActiveReminders, deactivateReminder,
@@ -9,7 +9,7 @@ import {
 } from '../database/queries';
 import { db } from '../database/connection';
 import { getReportSchedule, updateReportSchedule } from '../jobs/reporter.job';
-import { getCurrentMood, getMoodEmoji } from '../config/mood';
+import { getCurrentMood, getMoodLabel } from '../config/mood';
 import { getUptimeSummary, getUptimeHistory, calculateUptimePct, UptimeHistoryService } from '../services/uptimeHistory.service';
 import { listContainers, controlContainer, getContainerLogs, DockerService } from '../services/docker.service';
 import {
@@ -26,14 +26,8 @@ const UID = () => parseInt(process.env.MY_CHAT_ID || '0');
 // ─────────────────────────────────────────────
 
 router.post('/login', (req, res) => {
-    // Ambil IP — support proxy (Nginx, Cloudflare, dll)
-    const ip = (
-        req.headers['cf-connecting-ip'] ||
-        req.headers['x-real-ip'] ||
-        req.headers['x-forwarded-for']?.toString().split(',')[0].trim() ||
-        req.socket.remoteAddress ||
-        'unknown'
-    ) as string;
+    res.setHeader('Cache-Control', 'no-store');
+    const ip = req.ip || req.socket.remoteAddress || 'unknown';
 
     // Cek brute force
     const attempt = checkLoginAttempt(ip);
@@ -45,21 +39,25 @@ router.post('/login', (req, res) => {
         });
     }
 
-    const { username, password } = req.body;
-    if (!username || !password) {
+    const { username, password } = req.body || {};
+    if (typeof username !== 'string' || typeof password !== 'string' ||
+        !username.trim() || !password || username.length > 128 || password.length > 256) {
         return (res as any).status(400).json({ ok: false, message: 'Username dan password wajib diisi.' });
     }
 
-    const ADMIN_USER  = process.env.WEB_ADMIN_USER     || 'admin';
-    const WEB_PASS    = process.env.WEB_PASSWORD       || 'shorekeeper';
-    const GUEST_USER  = process.env.WEB_GUEST_USER     || 'demo';
-    const GUEST_PASS  = process.env.WEB_GUEST_PASSWORD || 'demo';
+    const adminUser = process.env.WEB_ADMIN_USER?.trim();
+    const webPassword = process.env.WEB_PASSWORD;
+    if (!adminUser || !webPassword || webPassword.length < 8) {
+        return (res as any).status(503).json({
+            ok: false,
+            message: 'Login web belum dikonfigurasi dengan aman. Atur WEB_ADMIN_USER dan WEB_PASSWORD (minimal 8 karakter).',
+        });
+    }
 
-    let role: 'admin' | 'guest' | null = null;
-    if (username === ADMIN_USER && password === WEB_PASS)        role = 'admin';
-    else if (username === GUEST_USER && password === GUEST_PASS) role = 'guest';
-
-    if (!role) {
+    const validUsername = matchesCredential(username.trim(), adminUser);
+    const validPassword = matchesCredential(password, webPassword);
+    const valid = validUsername && validPassword;
+    if (!valid) {
         recordFailedLogin(ip);
         const updated = checkLoginAttempt(ip);
         const msg = updated.remaining > 0
@@ -70,30 +68,22 @@ router.post('/login', (req, res) => {
 
     // Login berhasil — reset counter
     resetLoginAttempt(ip);
-    const token = createSession(role, username);
-    console.log(`✅ Login: ${username} (${role}) dari ${ip}`);
-    return (res as any).json({ ok: true, token, role });
+    const token = createSession(adminUser);
+    console.log(`✅ Web admin login dari ${ip}`);
+    return (res as any).json({ ok: true, token, role: 'admin' });
 });
 
 router.get('/verify', (req, res) => {
-    const token   = req.headers.authorization?.replace('Bearer ', '');
-    const session = token ? sessions.get(token) : null;
+    res.setHeader('Cache-Control', 'no-store');
+    const session = getSession(req.headers.authorization);
     return (res as any).json({ ok: !!session, role: session?.role || null });
 });
 
 router.post('/logout', (req, res) => {
-    const token = req.headers.authorization?.replace('Bearer ', '');
+    res.setHeader('Cache-Control', 'no-store');
+    const token = req.headers.authorization?.match(/^Bearer ([a-f0-9]{64})$/i)?.[1];
     if (token) sessions.delete(token);
     return (res as any).json({ ok: true });
-});
-
-router.get('/guest-info', (req, res) => {
-    const session = requireAuth(req, res);
-    if (!session || session.role !== 'guest') return;
-    const today = new Date().toISOString().slice(0, 10);
-    const entry = (req as any).guestCounter?.get(session.username);
-    const used  = (entry && entry.date === today) ? entry.count : 0;
-    return (res as any).json({ ok: true, remaining: Math.max(0, GUEST_LIMIT - used), limit: GUEST_LIMIT, used });
 });
 
 // ─────────────────────────────────────────────
@@ -127,7 +117,7 @@ router.post('/tts', async (req, res) => {
 router.get('/mood', (req, res) => {
     if (!requireAuth(req, res)) return;
     const mood = getCurrentMood();
-    return (res as any).json({ ok: true, mood: mood.mood, expression: mood.expression, reason: mood.reason, emoji: getMoodEmoji(mood.mood) });
+    return (res as any).json({ ok: true, mood: mood.mood, expression: mood.expression, reason: mood.reason, label: getMoodLabel(mood.mood) });
 });
 
 // ─────────────────────────────────────────────

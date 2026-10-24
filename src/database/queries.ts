@@ -80,6 +80,18 @@ export const addAliasToDB = async (alias: string, host: string, port: number, us
     } catch (e) { console.error('Gagal tambah alias:', e); return false; }
 };
 
+export const updateAliasInDB = async (
+    currentAlias: string, alias: string, host: string, port: number, user: string, pass: string
+): Promise<boolean> => {
+    try {
+        const [result]: any = await db.execute(
+            'UPDATE server_aliases SET alias = ?, host = ?, port = ?, username = ?, password = ? WHERE alias = ?',
+            [alias.toLowerCase().trim(), host, port, user, pass, currentAlias.toLowerCase().trim()]
+        );
+        return result.affectedRows > 0;
+    } catch (e) { console.error('Gagal mengubah alias:', e); return false; }
+};
+
 /** Mengambil detail alias SSH berdasarkan nama */
 export const getAliasFromDB = async (aliasName: string) => {
     try {
@@ -88,6 +100,13 @@ export const getAliasFromDB = async (aliasName: string) => {
             [aliasName.toLowerCase().trim()]
         );
         return rows.length > 0 ? rows[0] : null;
+    } catch (e) { console.error('Gagal ambil alias:', e); return null; }
+};
+
+export const getAliasById = async (id: number) => {
+    try {
+        const [rows]: any = await db.execute('SELECT * FROM server_aliases WHERE id = ?', [id]);
+        return rows[0] || null;
     } catch (e) { console.error('Gagal ambil alias:', e); return null; }
 };
 
@@ -105,7 +124,7 @@ export const removeAliasFromDB = async (alias: string): Promise<boolean> => {
 /** Mengambil semua alias SSH (hanya alias dan host) */
 export const getAllAliases = async () => {
     try {
-        const [rows]: any = await db.execute('SELECT alias, host FROM server_aliases');
+        const [rows]: any = await db.execute('SELECT id, alias, host FROM server_aliases');
         return rows;
     } catch (e) { console.error('Gagal ambil aliases:', e); return []; }
 };
@@ -223,6 +242,16 @@ export const deleteReminder = async (id: number, userId: number) => {
     } catch { return false; }
 };
 
+export const updateReminderMessage = async (id: number, userId: number, message: string): Promise<boolean> => {
+    try {
+        const [result]: any = await db.execute(
+            'UPDATE reminders SET message = ? WHERE id = ? AND user_id = ? AND active = 1',
+            [message, id, userId]
+        );
+        return result.affectedRows > 0;
+    } catch (e) { console.error('updateReminderMessage error:', e); return false; }
+};
+
 // ── CATATAN ──
 
 /** Menambahkan catatan baru */
@@ -258,6 +287,18 @@ export const getNoteById = async (id: number, userId: number) => {
         );
         return rows[0] || null;
     } catch { return null; }
+};
+
+export const updateNote = async (
+    id: number, userId: number, title: string, content: string, tag: string
+): Promise<boolean> => {
+    try {
+        const [result]: any = await db.execute(
+            'UPDATE notes SET title = ?, content = ?, tag = ? WHERE id = ? AND user_id = ?',
+            [title, content, tag, id, userId]
+        );
+        return result.affectedRows > 0;
+    } catch (e) { console.error('updateNote error:', e); return false; }
 };
 
 /** Mencari catatan berdasarkan keyword di title atau content */
@@ -303,4 +344,90 @@ export const setSetting = async (key: string, value: string): Promise<boolean> =
         );
         return true;
     } catch { return false; }
+};
+
+/** Menambahkan atau Update MikroTik */
+export const saveMikrotikDevice = async (alias: string, host: string, port: number, user: string, pass: string) => {
+    try {
+        await db.execute(
+            `INSERT INTO mikrotik_devices (alias, host, port, username, password) 
+             VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE host=VALUES(host), port=VALUES(port), username=VALUES(username), password=VALUES(password)`,
+            [alias.toLowerCase().trim(), host, port, user, pass]
+        );
+        return true;
+    } catch (e) { console.error('saveMikrotikDevice error:', e); return false; }
+};
+
+export const updateMikrotikDevice = async (
+    id: number, alias: string, host: string, port: number, user: string, pass: string
+): Promise<boolean> => {
+    try {
+        const [result]: any = await db.execute(
+            'UPDATE mikrotik_devices SET alias = ?, host = ?, port = ?, username = ?, password = ? WHERE id = ?',
+            [alias.toLowerCase().trim(), host.trim(), port, user.trim(), pass, id]
+        );
+        return result.affectedRows > 0;
+    } catch (e) { console.error('updateMikrotikDevice error:', e); return false; }
+};
+
+/** Mengambil data MikroTik untuk monitoring */
+export const getMikrotikDevices = async () => {
+    try {
+        const [rows] = await db.execute('SELECT * FROM mikrotik_devices');
+        return rows as any[];
+    } catch { return []; }
+};
+
+/** Mengambil satu perangkat MikroTik berdasarkan ID */
+export const getMikrotikDeviceById = async (id: number) => {
+    try {
+        const [rows] = await db.execute('SELECT * FROM mikrotik_devices WHERE id = ?', [id]);
+        return rows as any[];
+    } catch (e) {
+        console.error('getMikrotikDeviceById error:', e);
+        return [];
+    }
+};
+
+/** Update status hasil monitor */
+/** Update status hasil monitor */
+export const updateMikrotikStatus = async (id: number, cpu: number, uptime: string, status: string, rx: string, tx: string) => {
+    try {
+        // Kita sesuaikan query-nya dengan kolom yang ada di database kamu
+        await db.execute(
+            'UPDATE mikrotik_devices SET last_cpu = ?, last_uptime = ?, status = ?, rx_rate = ?, tx_rate = ?, last_check = NOW() WHERE id = ?',
+            [cpu, uptime, status, rx, tx, id]
+        );
+    } catch (e) { 
+        console.error('updateMikrotikStatus error:', e); 
+    }
+};
+
+/** Fungsi untuk menabung data ke tabel statistik (untuk Grafik) */
+export const saveMikrotikHistory = async (deviceId: number, rx: number, tx: number, cpu: number) => {
+    try {
+        const query = 'INSERT INTO mikrotik_stats (device_id, rx_val, tx_val, cpu_val) VALUES (?, ?, ?, ?)';
+        // Pakai db.execute agar konsisten dengan fungsi lainnya
+        await db.execute(query, [deviceId, rx, tx, cpu]);
+    } catch (e) {
+        console.error('saveMikrotikHistory error:', e);
+    }
+};
+
+/** Mengambil histori statistik untuk grafik */
+export const getMikrotikStats = async (deviceId: number, hours: number = 24) => {
+    try {
+        const query = `
+            SELECT rx_val, tx_val, cpu_val, created_at 
+            FROM mikrotik_stats 
+            WHERE device_id = ? 
+            AND created_at >= NOW() - INTERVAL ? HOUR 
+            ORDER BY created_at ASC
+        `;
+        const [rows] = await db.execute(query, [deviceId, hours]);
+        return rows as any[];
+    } catch (e) {
+        console.error('getMikrotikStats error:', e);
+        return [];
+    }
 };

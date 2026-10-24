@@ -16,15 +16,12 @@
   <input type="password" id="pw-input" placeholder="Password" autocomplete="current-password">
   <button id="login-btn">MASUK</button>
   <span id="login-err"></span>
-  <div id="demo-hint" style="margin-top:8px;padding:8px 14px;background:rgba(30,60,80,0.5);border:1px solid #1a3040;border-radius:8px;text-align:center">
-    <div style="font-size:10px;color:#3a6070;letter-spacing:1px;margin-bottom:4px">DEMO ACCESS</div>
-    <div style="font-size:12px;color:#4a8090">user: <b style="color:#7eb8d4">demo</b> · pass: <b style="color:#7eb8d4">demo</b></div>
-  </div>
 </div>
 
 <!-- APP -->
 <div id="app">
   <canvas id="cv"></canvas>
+  <div id="model-status" role="status" aria-live="polite">Memuat model 3D...</div>
   <div class="vignette"></div>
 
   <!-- Toolbar -->
@@ -40,9 +37,9 @@
     <h3>Pengaturan Model</h3>
     <div class="setting-row">
       <label>Skala</label>
-      <input type="range" id="s-scale" min="30" max="200" value="92"
+      <input type="range" id="s-scale" min="30" max="200" value="90"
         oninput="updateModel('scale',this.value);document.getElementById('v-scale').textContent=this.value+'%'">
-      <span id="v-scale">92%</span>
+      <span id="v-scale">90%</span>
     </div>
     <div class="setting-row">
       <label>Posisi X</label>
@@ -189,10 +186,10 @@
   <!-- Chat Panel -->
   <div id="panel">
     <div id="ph">
-      <div class="ico">🛡️</div>
+      <div class="ico">TENANG</div>
       <div>
         <div class="name">SHOREKEEPER</div>
-        <div class="sub">Penjaga Mercusuar · Nz404</div>
+        <div class="sub">Asisten Infrastruktur · Nz404</div>
       </div>
       <div id="dot"></div>
       <button id="tts-toggle" onclick="toggleTTS()" title="Auto TTS">🔇</button>
@@ -201,26 +198,41 @@
 
     <div id="qa-panel">
       <div id="qa-header" onclick="toggleQA()">
-        <div id="qa-title">Aksi Cepat</div>
+        <div id="qa-title">Menu Cepat</div>
         <span id="qa-toggle-icon">▼</span>
       </div>
-      <div id="qa-grid">
-        <button class="qa-btn" onclick="quickAction('status',this)">📊 Status</button>
-        <button class="qa-btn" onclick="quickAction('proxmox',this)">🏝️ Proxmox</button>
-        <button class="qa-btn" onclick="quickAction('monitor',this)">🖥️ Monitor</button>
-        <button class="qa-btn" onclick="quickAction('troubleshoot',this)">🔍 Troubleshoot</button>
-        <button class="qa-btn" onclick="quickAction('ssh',this)">🌐 SSH</button>
-        <button class="qa-btn" onclick="quickAction('laporan',this)">📋 Laporan</button>
-        <button class="qa-btn" onclick="toggleDockerPanel()" id="docker-qa-btn">🐳 Docker</button>
-        <button class="qa-btn" onclick="toggleUptimePanel()" id="uptime-qa-btn">📊 Uptime</button>
-        <button class="qa-btn" onclick="openPveModal()" id="pve-qa-btn" style="display:none">➕ PVE Cluster</button>
+      <div id="qa-menu">
+        <div id="qa-categories" role="tablist" aria-label="Kategori menu">
+          <button class="qa-category active" role="tab" aria-selected="true" data-category="monitoring" onclick="setQACategory('monitoring',this)">Monitoring</button>
+          <button class="qa-category" role="tab" aria-selected="false" data-category="servers" onclick="setQACategory('servers',this)">Server & Tools</button>
+          <button class="qa-category" role="tab" aria-selected="false" data-category="personal" onclick="setQACategory('personal',this)">Pribadi</button>
+        </div>
+        <div id="qa-grid">
+          <div class="qa-group" data-category="monitoring" role="tabpanel">
+            <button class="qa-btn" onclick="quickAction('status',this)">📊 Status</button>
+            <button class="qa-btn" onclick="quickAction('monitor',this)">🛡️ Monitor</button>
+            <button class="qa-btn" onclick="quickAction('laporan',this)">📈 Laporan</button>
+            <button class="qa-btn" onclick="toggleUptimePanel()" id="uptime-qa-btn">📉 Uptime</button>
+          </div>
+          <div class="qa-group" data-category="servers" role="tabpanel" hidden>
+            <button class="qa-btn" onclick="quickAction('ssh',this)">🌐 SSH</button>
+            <button class="qa-btn" onclick="quickAction('proxmox',this)">🖥️ Proxmox</button>
+            <button class="qa-btn" onclick="toggleDockerPanel()" id="docker-qa-btn">🐳 Docker</button>
+            <button class="qa-btn" onclick="quickAction('troubleshoot',this)">🔍 Troubleshoot</button>
+            <button class="qa-btn" onclick="openPveModal()" id="pve-qa-btn" style="display:none">➕ PVE Cluster</button>
+          </div>
+          <div class="qa-group" data-category="personal" role="tabpanel" hidden>
+            <button class="qa-btn" onclick="openSidePanelTab('reminder',this)">⏰ Reminder</button>
+            <button class="qa-btn" onclick="openSidePanelTab('notes',this)">📝 Catatan</button>
+          </div>
+        </div>
       </div>
     </div>
 
     <div id="msgs">
       <div class="m a">
         <div class="sn">Shorekeeper</div>
-        Sistem telah aktif, Shorekeeper kembali bertugas mengawasi mercusuar.
+        Sistem telah aktif. Shorekeeper siap membantu menjaga layanan tetap berjalan.
       </div>
     </div>
     <div id="typ"><span></span><span></span><span></span></div>
@@ -298,9 +310,14 @@
     </div>
   </div>
 
-<script src="https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/pixi.js@6/dist/browser/pixi.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/pixi-live2d-display/dist/cubism4.min.js"></script>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
 <script src="/app.js"></script>
 </body>
 </html>

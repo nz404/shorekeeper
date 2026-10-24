@@ -1,11 +1,16 @@
 import { parseReminderText, formatWaktu } from '../../jobs/reminder.job';
 import {
     addReminder, getActiveReminders, deleteReminder,
-    addNote, getNotes, getNoteById, searchNotes, deleteNote,
+    updateReminderMessage, addNote, getNotes, getNoteById, searchNotes, deleteNote, updateNote,
     getSetting, setSetting,
 } from '../../database/queries';
-import { updateReportSchedule, getReportSchedule } from '../../jobs/reporter.job';
-import { nowLocal } from '../../config/timezone';
+import {
+    updateReportSchedule,
+    updateReportScheduleEnabled,
+    getReportSchedule,
+} from '../../jobs/reporter.job';
+import { nowLocal, TZ } from '../../config/timezone';
+import { inputControls } from '../inputControls';
 
 // ─────────────────────────────────────────────
 // SAFE EDIT
@@ -39,17 +44,17 @@ export const showReminderMenu = async (ctx: any, userId: number) => {
         });
     }
 
-    const delButtons = reminders.map((r: any, i: number) => ([{
-        text:          `🗑️ Hapus #${i + 1} — ${r.message.slice(0, 25)}`,
-        callback_data: `rem_del_${r.id}`,
-    }]));
+    const reminderButtons = reminders.map((r: any, i: number) => ([
+        { text: `✏️ Edit #${i + 1}`, callback_data: `rem_edit_${r.id}` },
+        { text: '🗑️ Hapus', callback_data: `rem_del_${r.id}` },
+    ]));
 
     return safeEdit(ctx, text, {
         parse_mode: 'Markdown',
         reply_markup: {
             inline_keyboard: [
                 [{ text: '➕ Tambah Reminder', callback_data: 'rem_add_step1' }],
-                ...delButtons,
+                ...reminderButtons,
                 [{ text: '⬅️ Kembali', callback_data: 'back_to_help' }],
             ],
         },
@@ -63,7 +68,7 @@ export const showReminderMenu = async (ctx: any, userId: number) => {
 export const showReminderAddStep1 = async (ctx: any) => {
     return safeEdit(ctx, '⏰ *Tambah Reminder*\n\n*Step 1/3* — Ketik isi pesan reminder:', {
         parse_mode: 'Markdown',
-        reply_markup: { inline_keyboard: [[{ text: '❌ Batal', callback_data: 'menu_reminder' }]] }
+        reply_markup: inputControls('menu_reminder'),
     });
 };
 
@@ -89,7 +94,10 @@ export const showReminderAddStep2 = async (ctx: any) => {
                     { text: '🌙 Besok malam (20:00)', callback_data: 'rem_time_tom_20' },
                 ],
                 [{ text: '✏️ Waktu custom',  callback_data: 'rem_time_custom' }],
-                [{ text: '❌ Batal',          callback_data: 'menu_reminder'   }],
+                [
+                    { text: '⬅️ Kembali', callback_data: 'cancel_input:menu_reminder' },
+                    { text: '❌ Batal', callback_data: 'cancel_input:back_to_help' },
+                ],
             ],
         },
     });
@@ -103,7 +111,10 @@ export const showReminderAddStep3 = async (ctx: any) => {
                 [{ text: '1️⃣ Sekali saja',    callback_data: 'rem_repeat_none'   }],
                 [{ text: '📅 Setiap hari',     callback_data: 'rem_repeat_daily'  }],
                 [{ text: '📆 Setiap minggu',   callback_data: 'rem_repeat_weekly' }],
-                [{ text: '❌ Batal',            callback_data: 'menu_reminder'     }],
+                [
+                    { text: '⬅️ Kembali', callback_data: 'cancel_input:menu_reminder' },
+                    { text: '❌ Batal', callback_data: 'cancel_input:back_to_help' },
+                ],
             ],
         },
     });
@@ -202,15 +213,18 @@ export const showLaporanSchedule = async (ctx: any) => {
 
     return safeEdit(ctx,
         `📋 *Setting Jadwal Laporan*\n\n` +
-        `🌅 Laporan Pagi : *${pagiStr} WIB*\n` +
-        `🌙 Laporan Malam: *${malamStr} WIB*\n\n` +
-        `_Pilih yang ingin diubah:_`,
+        `🌅 Laporan Pagi : *${pagi.enabled ? 'AKTIF' : 'NONAKTIF'}* — ${pagiStr} ${TZ}\n` +
+        `🌙 Laporan Malam: *${malam.enabled ? 'AKTIF' : 'NONAKTIF'}* — ${malamStr} ${TZ}\n\n` +
+        `_Atur jam atau nyalakan/matikan masing-masing jadwal:_`,
         {
             parse_mode: 'Markdown',
             reply_markup: {
                 inline_keyboard: [
+                    [{ text: `${pagi.enabled ? '⏸ Matikan' : '▶️ Nyalakan'} Laporan Pagi`, callback_data: `sched_${pagi.enabled ? 'disable' : 'enable'}_pagi` }],
                     [{ text: `🌅 Ubah Laporan Pagi (${pagiStr})`,   callback_data: 'sched_pagi'  }],
+                    [{ text: `${malam.enabled ? '⏸ Matikan' : '▶️ Nyalakan'} Laporan Malam`, callback_data: `sched_${malam.enabled ? 'disable' : 'enable'}_malam` }],
                     [{ text: `🌙 Ubah Laporan Malam (${malamStr})`, callback_data: 'sched_malam' }],
+                    [{ text: '📬 Atur Tujuan Laporan', callback_data: 'laporan_destinations' }],
                     [{ text: '⬅️ Kembali', callback_data: 'back_to_help' }],
                 ],
             },
@@ -246,6 +260,16 @@ export const showSchedulePicker = async (ctx: any, session: 'pagi' | 'malam') =>
 export const handleSetSchedule = async (ctx: any, session: 'pagi' | 'malam', hour: number, minute: number) => {
     await updateReportSchedule(session, hour, minute);
     await ctx.answerCbQuery(`✅ Jadwal laporan ${session} diubah ke ${String(hour).padStart(2,'0')}:${String(minute).padStart(2,'0')}`).catch(() => {});
+    return showLaporanSchedule(ctx);
+};
+
+export const handleSetReportScheduleEnabled = async (
+    ctx: any,
+    session: 'pagi' | 'malam',
+    enabled: boolean
+) => {
+    await updateReportScheduleEnabled(session, enabled);
+    await ctx.answerCbQuery(`✅ Jadwal ${session} ${enabled ? 'dinyalakan' : 'dimatikan'}`).catch(() => {});
     return showLaporanSchedule(ctx);
 };
 
@@ -305,7 +329,7 @@ export const showNoteAddPrompt = async (ctx: any) => {
         '📝 *Tambah Catatan*\n\nKetik dengan format:\n`judul | isi catatan`\n\nDengan tag:\n`#server judul | isi catatan`\n\nTag: #general #server #config #network #personal',
         {
             parse_mode: 'Markdown',
-            reply_markup: { inline_keyboard: [[{ text: '❌ Batal', callback_data: 'menu_notes' }]] }
+            reply_markup: inputControls('menu_notes')
         }
     );
 };
@@ -323,11 +347,31 @@ export const showNoteDetail = async (ctx: any, userId: number, noteId: number) =
         parse_mode: 'Markdown',
         reply_markup: {
             inline_keyboard: [
+                [{ text: '✏️ Edit Isi', callback_data: `note_edit_${note.id}` }],
                 [{ text: '🗑️ Hapus', callback_data: `note_del_${note.id}` }],
                 [{ text: '⬅️ Kembali', callback_data: 'menu_notes' }],
             ],
         },
     });
+};
+
+export const handleEditNote = async (ctx: any, userId: number, noteId: number, input: string): Promise<boolean> => {
+    const match = input.match(/^(?:#(\w+)\s+)?(.+?)\s*\|\s*([\s\S]+)$/i);
+    if (!match) {
+        await ctx.reply('Format edit: `#tag judul baru | isi catatan baru` atau `judul baru | isi catatan baru`', {
+            parse_mode: 'Markdown',
+            reply_markup: inputControls('menu_notes'),
+        });
+        return false;
+    }
+    const tag = match[1] && TAGS.includes(match[1].toLowerCase()) ? match[1].toLowerCase() : 'general';
+    const ok = await updateNote(noteId, userId, match[2].trim(), match[3].trim(), tag);
+    if (!ok) {
+        await ctx.reply('❌ Catatan tidak ditemukan atau gagal diperbarui.');
+        return false;
+    }
+    await showNoteDetail(ctx, userId, noteId);
+    return true;
 };
 
 export const handleDeleteNote = async (ctx: any, userId: number, noteId: number) => {
@@ -368,7 +412,7 @@ export const handleAddNote = async (ctx: any, userId: number, input: string) => 
     if (!match) {
         return ctx.reply(
             `📒 *Format catatan:*\n\`judul | isi catatan\`\n\nDengan tag:\n\`#server nginx config | port 8080\``,
-            { parse_mode: 'Markdown' }
+            { parse_mode: 'Markdown', reply_markup: inputControls('menu_notes') }
         );
     }
 

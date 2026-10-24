@@ -1,15 +1,6 @@
-import OpenAI from 'openai';
+import { AI_MODEL, openai } from '../../services/ai.service';
 import { SHOREKEEPER_PROMPT, TEKS, wrapWithSKVoice } from '../../config/persona';
 import { runRemoteSSH } from '../../services/ssh.service';
-
-// ─────────────────────────────────────────────
-// GROQ CLIENT
-// ─────────────────────────────────────────────
-
-const openai = new OpenAI({
-    apiKey:  process.env.GROQ_API_KEY,
-    baseURL: 'https://api.groq.com/openai/v1',
-});
 
 // ─────────────────────────────────────────────
 // SAFE EDIT — fallback ke reply jika gagal
@@ -134,7 +125,7 @@ const analisisWithAI = async (alias: string, kategori: string, rawOutput: string
     const { label } = DIAGNOSA[kategori];
 
     const res = await openai.chat.completions.create({
-        model: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile',
+        model: AI_MODEL,
         messages: [
             { role: 'system', content: SHOREKEEPER_PROMPT },
             {

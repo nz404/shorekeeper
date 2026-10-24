@@ -2,6 +2,7 @@ import { Client } from 'ssh2';
 
 // SSH HELPER
 
+/** Menjalankan satu command Docker melalui koneksi SSH. */
 const sshExec = (
     config: { host: string; port: number; username: string; password: string },
     cmd: string,
@@ -43,6 +44,7 @@ export interface DockerServer {
 
 // LIST CONTAINERS
 
+/** Mengambil daftar container Docker dari server SSH. */
 export const listContainers = async (server: any): Promise<DockerServer> => {
     try {
         const out = await sshExec(
@@ -76,6 +78,7 @@ export const listContainers = async (server: any): Promise<DockerServer> => {
 
 // KONTROL CONTAINER
 
+/** Menjalankan aksi kontrol pada container Docker. */
 export const controlContainer = async (
     server: any,
     containerId: string,
@@ -95,6 +98,7 @@ export const controlContainer = async (
 
 // LOGS CONTAINER
 
+/** Mengambil log terakhir dari container Docker. */
 export const getContainerLogs = async (server: any, containerId: string, lines = 50): Promise<string> => {
     try {
         const out = await sshExec(
@@ -110,6 +114,7 @@ export const getContainerLogs = async (server: any, containerId: string, lines =
 
 // STATS CONTAINER
 
+/** Mengambil ringkasan penggunaan CPU, RAM, dan jaringan container. */
 export const getContainerStats = async (server: any, containerId: string): Promise<string> => {
     try {
         const out = await sshExec(

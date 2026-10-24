@@ -1,7 +1,8 @@
-import { openai } from '../../services/ai.service';
-import { SHOREKEEPER_PROMPT } from '../../config/persona';
+import { AI_MODEL, openai } from '../../services/ai.service';
+import { removeEmoji, SHOREKEEPER_PROMPT } from '../../config/persona';
 import { saveChat, getChatContext, getChatByDate } from '../../database/queries';
 
+/** Menangani chat AI dengan konteks percakapan dan arsip chat opsional. */
 export const handleAIChat = async (ctx: any, userId: number, userInput: string) => {
     try {
         await ctx.sendChatAction('typing');
@@ -30,11 +31,11 @@ export const handleAIChat = async (ctx: any, userId: number, userInput: string) 
 
         // 4. Panggil AI
         const res = await openai.chat.completions.create({
-            model:    process.env.GROQ_MODEL || 'llama-3.3-70b-versatile',
+            model:    AI_MODEL,
             messages: messages as any,
         });
 
-        const reply = res.choices[0].message.content || 'SK sedang kehilangan sinyal...';
+        const reply = removeEmoji(res.choices[0].message.content || 'SK sedang mengalami gangguan koneksi. Silakan coba kembali sebentar lagi.');
 
         // 5. Simpan ke database
         await saveChat(userId, 'user', userInput);

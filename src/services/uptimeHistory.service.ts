@@ -20,6 +20,7 @@ const lastStatus = new Map<string, boolean>();
 // CATAT EVENT
 // ─────────────────────────────────────────────
 
+/** Menyimpan event saat status online server berubah. */
 export const recordUptimeEvent = async (alias: string, isOnline: boolean): Promise<void> => {
     const prev = lastStatus.get(alias);
 
@@ -46,6 +47,7 @@ export const recordUptimeEvent = async (alias: string, isOnline: boolean): Promi
 // INISIALISASI STATUS AWAL
 // ─────────────────────────────────────────────
 
+/** Menginisialisasi status server tanpa membuat event perubahan pertama. */
 export const initServerStatus = (alias: string, isOnline: boolean): void => {
     lastStatus.set(alias, isOnline);
 };
@@ -54,6 +56,7 @@ export const initServerStatus = (alias: string, isOnline: boolean): void => {
 // AMBIL HISTORY
 // ─────────────────────────────────────────────
 
+/** Mengambil histori perubahan status server dalam rentang hari tertentu. */
 export const getUptimeHistory = async (alias: string, days: number = 7) => {
     try {
         const [rows]: any = await db.execute(
@@ -73,6 +76,7 @@ export const getUptimeHistory = async (alias: string, days: number = 7) => {
 // KALKULASI UPTIME PERCENTAGE
 // ─────────────────────────────────────────────
 
+/** Menghitung persentase uptime server pada rentang hari tertentu. */
 export const calculateUptimePct = async (alias: string, days: number = 7): Promise<number> => {
     try {
         const events = await getUptimeHistory(alias, days);
@@ -116,6 +120,7 @@ export const calculateUptimePct = async (alias: string, days: number = 7): Promi
 // SUMMARY SEMUA SERVER
 // ─────────────────────────────────────────────
 
+/** Membuat ringkasan uptime untuk seluruh server yang diminta. */
 export const getUptimeSummary = async (aliases: string[], days: number = 7) => {
     const results = await Promise.all(aliases.map(async alias => {
         const pct    = await calculateUptimePct(alias, days);

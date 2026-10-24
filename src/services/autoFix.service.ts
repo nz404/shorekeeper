@@ -1,16 +1,7 @@
-import OpenAI from 'openai';
+import { AI_MODEL, openai } from './ai.service';
 import { SHOREKEEPER_PROMPT } from '../config/persona';
 import { sshExecMulti } from './ssh.service';
 import { getAliasFromDB } from '../database/queries';
-
-// ═══════════════════════════════════════════════
-// AUTO-FIX ENGINE
-// ═══════════════════════════════════════════════
-
-const openai = new OpenAI({
-    apiKey:  process.env.GROQ_API_KEY,
-    baseURL: 'https://api.groq.com/openai/v1',
-});
 
 // ─────────────────────────────────────────────
 // PENDING APPROVALS — simpan di memory
@@ -96,7 +87,7 @@ export const analyzeIssue = async (issue: DetectedIssue): Promise<string> => {
     const ADMIN_NAME = process.env.ADMIN_NAME || 'Irvan';
     try {
         const res = await openai.chat.completions.create({
-            model: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile',
+            model: AI_MODEL,
             messages: [
                 { role: 'system', content: SHOREKEEPER_PROMPT },
                 {
@@ -223,7 +214,7 @@ export const approveFix = async (
     let resultMsg = '';
     try {
         const res = await openai.chat.completions.create({
-            model: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile',
+            model: AI_MODEL,
             messages: [
                 { role: 'system', content: SHOREKEEPER_PROMPT },
                 {

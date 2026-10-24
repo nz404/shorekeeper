@@ -95,6 +95,7 @@ export const sshExecMulti = (
     });
 };
 
+/** Menjalankan command SSH dengan timeout dan hasil aman untuk job monitoring. */
 export const sshExecSafe = (
     config: SSHConfig,
     command: string,

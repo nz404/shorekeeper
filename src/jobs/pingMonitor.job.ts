@@ -5,6 +5,7 @@ import * as dns from 'dns';
 const fetch = require('node-fetch') as typeof import('node-fetch').default;
 import { db } from '../database/connection';
 import { wrapWithSKVoice } from '../config/persona';
+import { sendAlertToSubscribers } from '../services/alert.service';
 
 // ═══════════════════════════════════════════════
 // PING MONITOR — HTTP/IP/Port check
@@ -50,6 +51,16 @@ export const addPingTarget = async (name: string, type: 'http' | 'ip', target: s
         );
         return result.insertId;
     } catch (e) { console.error('addPingTarget error:', e); return null; }
+};
+
+export const updatePingTarget = async (id: number, name: string, target: string): Promise<boolean> => {
+    try {
+        const [result]: any = await db.execute(
+            'UPDATE ping_targets SET name = ?, target = ? WHERE id = ? AND active = 1',
+            [name.trim(), target.trim(), id]
+        );
+        return result.affectedRows > 0;
+    } catch (e) { console.error('updatePingTarget error:', e); return false; }
 };
 
 export const removePingTarget = async (id: number) => {
@@ -229,7 +240,7 @@ export const initPingMonitorJob = (bot: Telegraf, chatId: string) => {
                 // Alert kalau status berubah
                 if (prev !== undefined && prev !== up) {
                     const alert = await formatAlert(target, up, latency);
-                    await bot.telegram.sendMessage(chatId, alert);
+                    await sendAlertToSubscribers(bot, alert);
                 }
 
                 lastStatus.set(target.id, up);

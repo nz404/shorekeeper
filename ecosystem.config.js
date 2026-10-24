@@ -2,7 +2,7 @@ module.exports = {
   apps: [{
     name: 'shorekeeper',
     script: 'npm',
-    args: 'run dev',
+    args: 'start',
     cwd: '/opt/shorekeeper',
     watch: false,
     autorestart: true,

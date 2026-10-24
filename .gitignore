@@ -1,6 +1,11 @@
 .env
+.env.*
+!.env.example
 dist/
 logs/
 node_modules/
+backups/
+temp/
 *.log
+*.tsbuildinfo
 *.docx

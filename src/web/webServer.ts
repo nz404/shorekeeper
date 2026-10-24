@@ -19,9 +19,25 @@ const STATIC_DIR = join(__dirname, '../../public');
 export const initWebServer = () => {
     const app    = express();
     const server = createServer(app);
-    const wss    = new WebSocketServer({ server, path: '/ws' });
+    const wss    = new WebSocketServer({
+        server,
+        path: '/ws',
+        maxPayload: 64 * 1024,
+        perMessageDeflate: false,
+    });
 
-    app.use(express.json());
+    app.disable('x-powered-by');
+    app.set('trust proxy', process.env.WEB_TRUST_PROXY || false);
+    app.use((_req, res, next) => {
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.setHeader('X-Frame-Options', 'DENY');
+        res.setHeader('Referrer-Policy', 'no-referrer');
+        res.setHeader('Permissions-Policy', 'camera=(), microphone=(self), geolocation=()');
+        res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+        res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+        next();
+    });
+    app.use(express.json({ limit: '32kb', strict: true }));
     app.use(express.static(STATIC_DIR));
 
     // REST API

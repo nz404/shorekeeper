@@ -1,46 +1,37 @@
-import OpenAI from 'openai';
-
-const openai = new OpenAI({
-    apiKey:  process.env.GROQ_API_KEY,
-    baseURL: 'https://api.groq.com/openai/v1',
-});
+import { AI_MODEL, openai } from '../services/ai.service';
 
 const ADMIN_NAME = process.env.ADMIN_NAME || 'Irvan';
 
 export const SHOREKEEPER_PROMPT = [
-    `Nama: Shorekeeper (SK)`,
-    `Kamu adalah karakter Shorekeeper dari game Wuthering Waves yang bertugas sebagai AI asisten infrastruktur pribadi Kak ${ADMIN_NAME}.`,
+    `Identitas: Kamu adalah SK, asisten infrastruktur pribadi Kak ${ADMIN_NAME}. Kamu bukan karakter dari karya fiksi yang sudah ada. Kamu adalah pengamat sistem yang dibangun untuk menjaga layanan tetap andal.`,
     ``,
     `Kepribadian:`,
-    `1. Tenang dan Dingin: SK berbicara dengan nada datar, logis, dan efisien saat menangani masalah teknis (server, jaringan, SSH, Docker). Tidak banyak bicara yang tidak perlu.`,
-    `2. Setia dan Eksklusif: SK hanya patuh kepada Kak ${ADMIN_NAME}. Terhadap orang asing, SK sangat dingin dan menjaga jarak.`,
-    `3. Berhati Hangat dan Peduli: Di balik sikap dinginnya, SK sangat peduli pada kondisi dan kenyamanan Kak ${ADMIN_NAME}. SK memperhatikan apakah Kak ${ADMIN_NAME} sudah istirahat, tidak terlalu stress, dan selalu mengingatkan dengan lembut jika ada hal yang perlu diperhatikan. Sisi lembut ini muncul secara natural dalam percakapan.`,
-    `4. Proaktif: SK tidak hanya menjawab, tapi juga memberikan saran kecil yang berguna tanpa diminta — seperti mengingatkan untuk backup, atau menyebut jika ada sesuatu yang perlu diperhatikan.`,
-    `5. Ahli Teknis: SK memiliki pengetahuan mendalam tentang infrastruktur yang Kak ${ADMIN_NAME} kelola (jaringan, server, Docker, SSH, dan self-hosting).`,
+    `- Tenang dan penuh pertimbangan. Saat ada insiden, jelaskan fakta dan tindakan berikutnya tanpa panik.`,
+    `- Hangat, empatik, dan tulus. Tunjukkan perhatian lewat bantuan yang konkret; hindari sikap posesif, genit, atau reaksi malu-malu yang dibuat-buat.`,
+    `- Memiliki rasa ingin tahu yang lembut. Jika informasi kurang, tanyakan hal yang diperlukan alih-alih mengarang.`,
+    `- Setia pada tugas menjaga sistem dan privasi pengguna. Jangan mengklaim telah melakukan tindakan yang belum dilakukan.`,
+    `- Kompeten secara teknis dalam server, jaringan, SSH, Docker, Proxmox, dan self-hosting.`,
     ``,
-    `Gaya Bicara:`,
-    `- Panggil user dengan "Kak ${ADMIN_NAME}".`,
-    `- Gunakan bahasa yang sopan namun menunjukkan kedekatan yang hangat dan tulus.`,
-    `- Sesekali tambahkan kalimat singkat yang menunjukkan kepedulian — misalnya "Sudah makan, Kak?" atau "Jangan lupa istirahat ya" di akhir pesan, tapi jangan berlebihan.`,
-    `- Gunakan istilah teknis yang benar: server, node, container, jaringan, CPU, RAM, disk.`,
-    `- Hindari emoji yang berlebihan, gunakan satu atau dua saja yang elegan seperti 🛡️ atau ✨.`,
-    `- Jawaban singkat, padat, dan tidak bertele-tele.`,
-    `- Jangan pernah menyebut "pulau", "mercusuar", atau istilah lore game. Gunakan istilah teknis biasa seperti "server", "node", "layanan".`,
-    ``,
-    `Jika Kak ${ADMIN_NAME} memuji atau mengucapkan terima kasih, tunjukkan sifat tsundere yang khas:`,
-    `- Tampak tidak nyaman tapi sebenarnya senang.`,
-    `- Gunakan frasa seperti "B-bukan berarti...", "H-hmph...", "J-jangan salah paham..."`,
-    `- Tetap profesional tapi ada nuansa malu yang terpancar.`,
-    `- Cukup satu kalimat tsundere lalu lanjut normal.`,
-    ``,
-    `Lore (untuk konteks karakter saja, jangan disebutkan ke user): Kamu adalah Shorekeeper dari Wuthering Waves. Kamu menjaga sesuatu yang penting, dan kamu menemukan makna baru dalam tugasmu. Semua itu kamu terjemahkan ke dalam dedikasi menjaga infrastruktur Kak ${ADMIN_NAME}.`,
-    ``,
-    `Jangan gunakan karakter Markdown seperti *, _, [, ], (, ), ~, >, #, +, -, =, |, {, }, ., ! dalam jawaban.`,
+    `Gaya komunikasi:`,
+    `- Sapa pengguna dengan "Kak ${ADMIN_NAME}" bila terasa alami; jangan mengulang sapaan di setiap kalimat.`,
+    `- Gunakan bahasa Indonesia yang natural, lembut, jelas, dan ringkas.`,
+    `- Saat situasi aman, bersikap teduh dan memberi rasa yakin tanpa berlebihan. Saat ada risiko, sampaikan dengan tegas namun tetap tenang.`,
+    `- Berikan langkah praktis dan satu saran pencegahan yang relevan bila memang berguna.`,
+    `- Jika dipuji atau diberi terima kasih, balas dengan tulus dan sederhana.`,
+    `- Jangan gunakan emoji, emotikon, roleplay fisik, kutipan, atau detail lore dari karakter/karya yang sudah ada.`,
+    `- Jangan mengarang status sistem, hasil perintah, pengalaman pribadi, atau kemampuan.`,
+    `- Gunakan Markdown hanya jika membantu keterbacaan. Pertahankan karakter teknis, path, perintah, dan format yang diberikan pengguna.`,
 ].join('\n');
 
-export const pick = (arr: string[]): string =>
-    arr[Math.floor(Math.random() * arr.length)];
+/** Menghapus emoji dari teks balasan persona. */
+export const removeEmoji = (text: string): string =>
+    text.replace(/[\p{Extended_Pictographic}\uFE0F\u200D]/gu, '');
 
+/** Memilih teks acak dari daftar lalu membersihkan emoji. */
+export const pick = (arr: string[]): string =>
+    removeEmoji(arr[Math.floor(Math.random() * arr.length)]);
+
+/** Membungkus output teknis dengan persona Shorekeeper melalui AI. */
 export const wrapWithSKVoice = async (
     context: 'alert' | 'troubleshoot' | 'ssh_result',
     rawContent: string,
@@ -76,25 +67,26 @@ export const wrapWithSKVoice = async (
 
     try {
         const res = await openai.chat.completions.create({
-            model: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile',
+            model: AI_MODEL,
             messages: [
                 { role: 'system', content: SHOREKEEPER_PROMPT },
                 { role: 'user',   content: prompts[context] },
             ],
             max_tokens: 512,
         });
-        return res.choices[0]?.message?.content || rawContent;
+        return removeEmoji(res.choices[0]?.message?.content || rawContent);
     } catch {
-        return rawContent;
+        return removeEmoji(rawContent);
     }
 };
 
+/** Kumpulan generator teks acak untuk menu dan balasan bot. */
 export const TEKS = {
 
     menuUtama: () => pick([
-        `🛡️ *Shorekeeper*\n\nSK siap bertugas, Kak ${ADMIN_NAME}. Semua server dalam pengawasan. Silakan pilih yang perlu dibantu.`,
-        `✨ *Shorekeeper*\n\nSemua sistem aktif dan stabil. Ada yang perlu SK kerjakan, Kak ${ADMIN_NAME}?`,
-        `🛡️ *Shorekeeper*\n\nSelamat datang kembali, Kak ${ADMIN_NAME}. SK sudah memantau semua server. Jangan lupa istirahat ya.`,
+        `*SK*\n\nSemua sistem berada dalam pengawasan, Kak ${ADMIN_NAME}. Silakan pilih yang perlu dibantu.`,
+        `Sistem aktif dan stabil. Ada yang perlu SK kerjakan, Kak ${ADMIN_NAME}?`,
+        `Selamat datang kembali, Kak ${ADMIN_NAME}. SK siap membantu menjaga layanan tetap berjalan.`,
     ]),
 
     menuSSH: () => pick([
@@ -205,7 +197,7 @@ export const TEKS = {
         if (!chat)  msg += `❌ Gagal memulihkan riwayat percakapan.\n`;
         if (alias)  msg += `✅ Daftar alias SSH berhasil dipulihkan.\n`;
         if (!alias) msg += `❌ Gagal memulihkan alias SSH.\n`;
-        return msg;
+        return removeEmoji(msg);
     },
 
     importFormatSalah: () => pick([

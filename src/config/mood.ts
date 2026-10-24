@@ -4,7 +4,7 @@
 
 import { nowLocal } from './timezone';
 
-export type SKMood = 'tenang' | 'khawatir' | 'siaga' | 'frustrasi' | 'santai' | 'malu';
+export type SKMood = 'tenang' | 'khawatir' | 'siaga' | 'frustrasi' | 'santai' | 'hangat';
 
 export interface MoodState {
     mood:       SKMood;
@@ -42,8 +42,8 @@ const MOOD_CONFIG: Record<SKMood, { expression: string; motions: string[] }> = {
     khawatir:  { expression: 'confused',  motions: ['Idle']           },
     siaga:     { expression: 'surprised', motions: ['Idle']           },
     frustrasi: { expression: 'angry',     motions: ['Idle']           },
-    santai:    { expression: 'blush',     motions: ['Idle', 'DaiJi']  },
-    malu:      { expression: 'blush',     motions: ['Wave']           },
+    santai:    { expression: 'heart',     motions: ['Idle', 'DaiJi']  },
+    hangat:    { expression: 'heart',     motions: ['Idle']           },
 };
 
 export const PRAISE_KEYWORDS = [
@@ -81,12 +81,10 @@ const MOOD_GREETINGS: Record<SKMood, string[]> = {
         `Aktivitas rendah malam ini. SK tetap berjaga.`,
         `Infrastruktur aman. Istirahatlah, Kak ${ADMIN} — SK yang jaga.`,
     ],
-    malu: [
-        `B-bukan berarti SK senang dipuji ya! Hanya... menjalankan tugas saja.`,
-        `J-jangan salah paham. Memang seharusnya bekerja dengan baik. Itu saja.`,
-        `H-hmph. Pujian itu tidak akan membuat SK lengah dalam bertugas.`,
-        `A-apa? Tidak perlu bilang begitu... tapi, terima kasih. Sedikit.`,
-        `Bukan karena pujianmu SK bekerja keras ya! Memang sudah kewajiban.`,
+    hangat: [
+        `Terima kasih, Kak ${ADMIN}. Saya senang bisa membantu.`,
+        `Sama-sama, Kak ${ADMIN}. Saya akan tetap membantu menjaga sistem.`,
+        `Saya menghargai itu, Kak ${ADMIN}.`,
     ],
 };
 
@@ -94,6 +92,7 @@ const MOOD_GREETINGS: Record<SKMood, string[]> = {
 // KALKULASI MOOD
 // ─────────────────────────────────────────────
 
+/** Menentukan mood Shorekeeper berdasarkan status server dan waktu lokal. */
 export const calculateMood = (servers: ServerStatus[]): MoodState => {
     const now          = nowLocal();
     const hour         = now.getHours();
@@ -102,7 +101,7 @@ export const calculateMood = (servers: ServerStatus[]): MoodState => {
     if (!servers.length) {
         return {
             mood:       isSantaiTime ? 'santai' : 'tenang',
-            expression: isSantaiTime ? 'blush'  : 'heart',
+            expression: 'heart',
             reason:     isSantaiTime ? 'Aktivitas rendah di jam malam.' : 'Belum ada server yang dipantau.',
             updatedAt:  now,
         };
@@ -148,12 +147,14 @@ export const calculateMood = (servers: ServerStatus[]): MoodState => {
 // GET / SET MOOD
 // ─────────────────────────────────────────────
 
-export const getCurrentMood  = (): MoodState  => currentMood;
+/** Mengambil mood Shorekeeper yang sedang aktif. */
+export const getCurrentMood = (): MoodState => currentMood;
 
+/** Memperbarui mood aktif dan mempertahankan alasan saat mood tidak berubah. */
 export const updateMood = (servers: ServerStatus[]): MoodState => {
     const newMood = calculateMood(servers);
     if (newMood.mood !== currentMood.mood) {
-        console.log(`🎭 Mood SK: ${currentMood.mood} → ${newMood.mood} (${newMood.reason})`);
+        console.log(`Mood SK: ${currentMood.mood} → ${newMood.mood} (${newMood.reason})`);
         currentMood = newMood;
     } else {
         currentMood = { ...newMood, reason: currentMood.reason };
@@ -161,11 +162,12 @@ export const updateMood = (servers: ServerStatus[]): MoodState => {
     return currentMood;
 };
 
-export const getMoodEmoji = (mood: SKMood): string => ({
-    tenang:    '😊',
-    khawatir:  '😟',
-    siaga:     '😰',
-    frustrasi: '😤',
-    santai:    '😴',
-    malu:      '😳',
+/** Mengubah kode mood menjadi label yang ditampilkan pada UI. */
+export const getMoodLabel = (mood: SKMood): string => ({
+    tenang:    'Tenang',
+    khawatir:  'Khawatir',
+    siaga:     'Siaga',
+    frustrasi: 'Perlu perhatian',
+    santai:    'Santai',
+    hangat:    'Hangat',
 }[mood]);

@@ -2,7 +2,7 @@
 // STATE
 // ════════════════════════════════════
 let token       = localStorage.getItem('sk_token');
-let userRole    = localStorage.getItem('sk_role') || 'guest';
+let userRole    = localStorage.getItem('sk_role') || 'admin';
 let adminName   = localStorage.getItem('sk_admin_name') || 'Irvan';
 let ws          = null;
 let model       = null;
@@ -13,8 +13,17 @@ let ttsUtter    = null;
 let isRecording = false;
 let recognition = null;
 let isLight     = localStorage.getItem('sk_theme') === 'light';
-let modelSettings = JSON.parse(localStorage.getItem('sk_model') || '{"scale":92,"offsetX":0,"offsetY":0}');
-const DEFAULT_MODEL = { scale: 92, offsetX: 0, offsetY: 0 };
+const DEFAULT_MODEL = { scale: 90, offsetX: 0, offsetY: 0 };
+let modelSettings = JSON.parse(localStorage.getItem('sk_model') || JSON.stringify(DEFAULT_MODEL));
+if (localStorage.getItem('sk_model_version') !== '3') {
+  modelSettings = { ...DEFAULT_MODEL };
+  localStorage.setItem('sk_model', JSON.stringify(modelSettings));
+  localStorage.setItem('sk_model_version', '3');
+}
+
+function removeEmoji(text) {
+  return String(text).replace(/[\p{Extended_Pictographic}\uFE0F\u200D]/gu, '');
+}
 const synth = window.speechSynthesis;
 
 // ════════════════════════════════════
@@ -26,13 +35,19 @@ async function checkAuth() {
     const r = await fetch('/api/verify', { headers: { Authorization: `Bearer ${token}` } });
     const d = await r.json();
     if (d.ok) {
-      userRole = d.role || 'guest';
+      userRole = 'admin';
       localStorage.setItem('sk_role', userRole);
       showApp();
     } else {
+      localStorage.removeItem('sk_token');
+      token = null;
       showLogin();
     }
-  } catch { showLogin(); }
+  } catch {
+    localStorage.removeItem('sk_token');
+    token = null;
+    showLogin();
+  }
 }
 
 function showLogin() {
@@ -50,9 +65,9 @@ function showApp() {
   if (ws) { try { ws.close(); } catch {} ws = null; }
   // Reset chat history saat login baru
   const msgs = document.getElementById('msgs');
-  if (msgs) msgs.innerHTML = `<div class="m a"><div class="sn">Shorekeeper</div>Sistem telah aktif, Kak ${adminName}. Shorekeeper kembali bertugas mengawasi mercusuar.</div>`;
+  if (msgs) msgs.innerHTML = `<div class="m a"><div class="sn">Shorekeeper</div>Sistem telah aktif, Kak ${adminName}. Saya siap membantu menjaga layanan tetap berjalan.</div>`;
   initWS();
-  initLive2D();
+  initMMD3D();
   initVoice();
   initQA();
   setTimeout(loadMood, 2000);
@@ -61,61 +76,37 @@ function showApp() {
 }
 
 function applyRoleRestrictions() {
-  const isGuest = userRole === 'guest';
-
-  // Sembunyikan SEMUA quick action untuk guest
-  document.querySelectorAll('.qa-btn').forEach(btn => {
-    btn.style.display = isGuest ? 'none' : '';
-  });
-
-  // Sembunyikan qa-panel header juga kalau guest (tidak ada tombol apapun)
-  const qaPanel = document.getElementById('qa-panel');
-  if (qaPanel) qaPanel.style.display = isGuest ? 'none' : '';
-
-  // Sembunyikan side panel dan docker untuk guest
-  const sidePanelBtn = document.querySelector('.tool-btn[onclick="toggleSidePanel()"]');
-  if (sidePanelBtn) sidePanelBtn.style.display = isGuest ? 'none' : '';
-
   const dockerPanel = document.getElementById('docker-panel');
   if (dockerPanel) dockerPanel.classList.remove('open');
-  // Tombol PVE Cluster — admin only
-  const pveBtn = document.getElementById('pve-qa-btn');
-  if (pveBtn) pveBtn.style.display = userRole === 'admin' ? '' : 'none';
-
-  // Tampilkan badge guest - limit dari server
-  if (isGuest) {
-    const sub = document.querySelector('#ph .sub');
-    if (sub) sub.textContent = 'Demo Mode · memuat...';
-    // Ambil sisa pesan dari server
-    fetch('/api/guest-info', { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.json())
-      .then(d => {
-        if (sub) sub.textContent = `Demo Mode · ${d.remaining}/${d.limit} pesan tersisa`;
-      }).catch(() => {
-        if (sub) sub.textContent = 'Demo Mode';
-      });
-  }
 }
 
 document.getElementById('login-btn').addEventListener('click', async () => {
+  const button = document.getElementById('login-btn');
   const pw = document.getElementById('pw-input').value;
   if (!pw) return;
   const un = document.getElementById('un-input').value.trim();
   if (!un) { document.getElementById('login-err').textContent = 'Username tidak boleh kosong.'; return; }
-  const r = await fetch('/api/login', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username: un, password: pw })
-  });
-  const d = await r.json();
-  if (d.ok) {
-    token    = d.token;
-    userRole = d.role || 'guest';
-    localStorage.setItem('sk_token', token);
-    localStorage.setItem('sk_role',  userRole);
-    document.getElementById('login-err').textContent = '';
-    showApp();
-  } else {
-    document.getElementById('login-err').textContent = d.message || 'Password salah.';
+  button.disabled = true;
+  try {
+    const r = await fetch('/api/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: un, password: pw })
+    });
+    const d = await r.json();
+    if (d.ok) {
+      token    = d.token;
+      userRole = 'admin';
+      localStorage.setItem('sk_token', token);
+      localStorage.setItem('sk_role', userRole);
+      document.getElementById('login-err').textContent = '';
+      showApp();
+    } else {
+      document.getElementById('login-err').textContent = d.message || 'Username atau password salah.';
+    }
+  } catch {
+    document.getElementById('login-err').textContent = 'Tidak dapat terhubung ke server.';
+  } finally {
+    button.disabled = false;
   }
 });
 document.getElementById('pw-input').addEventListener('keydown', e => {
@@ -147,44 +138,32 @@ function initWS() {
       if (msg.ok) {
         dot.classList.add('on');
         // Update role dan nama dari server response
-        userRole  = msg.role || userRole;
+        userRole  = 'admin';
         if (msg.adminName) {
           adminName = msg.adminName;
           localStorage.setItem('sk_admin_name', adminName);
         }
         localStorage.setItem('sk_role', userRole);
         applyRoleRestrictions();
-        if (userRole === 'guest') {
-          fetch('/api/guest-info', { headers: { Authorization: `Bearer ${token}` } })
-            .then(r => r.json())
-            .then(d => {
-              const sub = document.querySelector('#ph .sub');
-              if (sub) sub.textContent = `Demo Mode · ${d.remaining}/${d.limit} pesan tersisa`;
-            }).catch(() => {});
-        }
         // Apply mood dari auth response
-        if (msg.mood) applyMood(msg.mood, msg.expression, msg.moodEmoji);
+        if (msg.mood) applyMood(msg.mood, msg.expression, msg.moodLabel);
       } else {
         localStorage.removeItem('sk_token');
         showLogin();
       }
     }
 
-    if (msg.type === 'guest_info') {
-      const sub = document.querySelector('#ph .sub');
-      if (sub) sub.textContent = `Demo Mode · ${msg.remaining}/${msg.limit} pesan tersisa`;
-    }
     if (msg.type === 'typing') { typ.style.display = msg.status ? 'block' : 'none'; msgs.scrollTop = msgs.scrollHeight; }
     if (msg.type === 'chat' && msg.role === 'assistant') {
-      addMsg('a', 'Shorekeeper', msg.content);
+      addMsg('a', 'Shorekeeper', removeEmoji(msg.content));
       if (msg.expression) triggerExp(msg.expression);
       else autoExpression(msg.content);
-      if (model) { try { model.motion('Talk'); } catch {} }
+      if (model) model.motion('Talk', Math.min(12_000, 2500 + msg.content.length * 35));
     }
     if (msg.type === 'error') addMsg('a', 'System', msg.message);
 
     if (msg.type === 'mood_update') {
-      applyMood(msg.mood, msg.expression, msg.emoji);
+      applyMood(msg.mood, msg.expression, msg.label);
     }
   };
   ws.onclose = () => {
@@ -196,6 +175,7 @@ function initWS() {
 
 function addMsg(role, sender, text) {
   typ.style.display = 'none';
+  if (role === 'a') text = removeEmoji(text);
   const id = `msg-${++msgCounter}`;
   const d  = document.createElement('div');
   d.className = `m ${role}`;
@@ -280,8 +260,14 @@ inp.addEventListener('input', () => { inp.style.height = 'auto'; inp.style.heigh
 let qaVisible = localStorage.getItem('sk_qa') !== 'false';
 
 function initQA() {
+  const savedCategory = ['monitoring', 'servers', 'personal'].includes(localStorage.getItem('sk_qa_category'))
+    ? localStorage.getItem('sk_qa_category')
+    : 'monitoring';
+  const categoryButton = document.querySelector(`.qa-category[data-category="${savedCategory}"]`)
+    || document.querySelector('.qa-category[data-category="monitoring"]');
+  if (categoryButton) setQACategory(categoryButton.dataset.category, categoryButton);
   if (!qaVisible) {
-    document.getElementById('qa-grid').classList.add('hidden');
+    document.getElementById('qa-menu').classList.add('hidden');
     document.getElementById('qa-toggle-icon').classList.add('collapsed');
   }
 }
@@ -289,8 +275,34 @@ function initQA() {
 function toggleQA() {
   qaVisible = !qaVisible;
   localStorage.setItem('sk_qa', qaVisible);
-  document.getElementById('qa-grid').classList.toggle('hidden', !qaVisible);
+  document.getElementById('qa-menu').classList.toggle('hidden', !qaVisible);
   document.getElementById('qa-toggle-icon').classList.toggle('collapsed', !qaVisible);
+}
+
+function setQACategory(category, button) {
+  if (!['monitoring', 'servers', 'personal'].includes(category)) category = 'monitoring';
+  document.querySelectorAll('.qa-category').forEach(tab => {
+    const active = tab === button;
+    tab.classList.toggle('active', active);
+    tab.setAttribute('aria-selected', String(active));
+  });
+  document.querySelectorAll('.qa-group').forEach(group => {
+    group.hidden = group.dataset.category !== category;
+  });
+  localStorage.setItem('sk_qa_category', category);
+}
+
+function openSidePanelTab(tab, button) {
+  const panel = document.getElementById('side-panel');
+  if (!panel.classList.contains('open')) toggleSidePanel();
+  const tabButton = [...document.querySelectorAll('.sp-tab')]
+    .find(element => element.getAttribute('onclick')?.includes(`'${tab}'`));
+  if (tabButton) switchTab(tab, tabButton);
+  if (button) {
+    document.querySelectorAll('.qa-btn').forEach(item => item.classList.remove('active'));
+    button.classList.add('active');
+    setTimeout(() => button.classList.remove('active'), 1200);
+  }
 }
 
 // ════════════════════════════════════
@@ -304,7 +316,6 @@ const QA_LABELS = {
 
 function quickAction(key, el) {
   if (!ws || ws.readyState !== 1) return;
-  if (userRole === 'guest') return; // Sudah disembunyikan, tapi double check
   document.querySelectorAll('.qa-btn').forEach(b => b.classList.remove('active'));
   if (el) { el.classList.add('active'); setTimeout(() => el.classList.remove('active'), 2000); }
   addMsg('u', `Kak ${adminName}`, QA_LABELS[key]);
@@ -499,20 +510,14 @@ function applyModelTransform() {
     const skMsg = document.getElementById('sk-speech');
     if (skMsg && parseFloat(skMsg.style.opacity) > 0) positionBubble();
   });
-  if (!model || !model.internalModel) return;
-  const { W, H } = getCanvasSize();
-  const origH = model.internalModel.originalHeight;
-  const origW = model.internalModel.originalWidth;
-  if (!origH) return;
-  const scale = H / origH * (modelSettings.scale / 100);
-  model.scale.set(scale);
-  model.x = W / 2 - (origW * scale) / 2 + modelSettings.offsetX;
-  model.y = H - (origH * scale) * 0.97 + modelSettings.offsetY;
+  if (!model) return;
+  model.setSettings(modelSettings);
 }
 
 function resetModel() {
   modelSettings = { ...DEFAULT_MODEL };
   localStorage.setItem('sk_model', JSON.stringify(modelSettings));
+  localStorage.setItem('sk_model_version', '3');
   document.getElementById('s-scale').value = DEFAULT_MODEL.scale;
   document.getElementById('s-x').value     = DEFAULT_MODEL.offsetX;
   document.getElementById('s-y').value     = DEFAULT_MODEL.offsetY;
@@ -532,95 +537,71 @@ function loadSavedSettings() {
 }
 
 // ════════════════════════════════════
-// LIVE2D
+// PMX / MMD
 // ════════════════════════════════════
-async function initLive2D() {
+async function initMMD3D() {
   const canvas = document.getElementById('cv');
-  const { W, H } = getCanvasSize();
-  const app = new PIXI.Application({
-    view:               canvas,
-    transparent:        true,
-    width:              W,
-    height:             H,
-    resolution:         window.devicePixelRatio || 1,
-    autoDensity:        true,
-    clearBeforeRender:  true,
-    preserveDrawingBuffer: false,
-  });
-
-  window.addEventListener('resize', () => {
-    const { W: nW, H: nH } = getCanvasSize();
-    app.renderer.resize(nW, nH);
-    applyModelTransform();
-    // Re-posisikan bubble kalau sedang tampil
-    const skMsg = document.getElementById('sk-speech');
-    if (skMsg && parseFloat(skMsg.style.opacity) > 0) positionBubble();
-  });
-
-  // ── Mouse tracking ──
-  document.addEventListener('mousemove', (e) => {
-    if (!model || !model.internalModel) return;
-    const canvas = app.view;
-    const rect   = canvas.getBoundingClientRect();
-    // Normalkan ke -1 ~ 1 relatif ke tengah canvas
-    const cx = rect.left + rect.width  / 2;
-    const cy = rect.top  + rect.height / 2;
-    const nx = (e.clientX - cx) / (rect.width  / 2);
-    const ny = (e.clientY - cy) / (rect.height / 2);
-    try {
-      model.internalModel.focusController.focus(nx * 0.6, -ny * 0.4);
-    } catch {}
-  });
-
+  const status = document.getElementById('model-status');
+  if (model) {
+    model.dispose();
+    model = null;
+  }
+  if (status) {
+    status.hidden = false;
+    status.textContent = 'Memuat model PMX...';
+  }
   try {
-    model = await PIXI.live2d.Live2DModel.from('/model/IceGirl.model3.json', { autoInteract: false });
-    app.stage.addChild(model);
+    const { createShorekeeper3D } = await import('/model3d.js');
+    model = await createShorekeeper3D(canvas, modelSettings, message => {
+      if (status) {
+        status.textContent = message;
+        status.hidden = !message;
+      }
+    });
     loadSavedSettings();
     applyModelTransform();
     model.motion('Idle');
-    setInterval(() => { try { model.motion('Idle'); } catch {} }, 8000);
-    model.interactive = true;
-    model.on('pointerdown', () => { try { model.motion('Idle'); } catch {} });
-
-    // ── Click reaction — pasang di document bukan canvas ──
-    document.addEventListener('click', (e) => {
-      if (!model) return;
-      const canvas = app.view;
-      const rect   = canvas.getBoundingClientRect();
-      // Hanya proses kalau klik di area canvas Live2D
-      if (e.clientX < rect.left || e.clientX > rect.right) return;
-      if (e.clientY < rect.top  || e.clientY > rect.bottom) return;
-      // Jangan proses klik pada UI element (tombol, panel, dll)
-      if (e.target.closest('button, .float-panel, #docker-panel, #side-panel, #chat-panel, #qa-panel, input, select, textarea')) return;
-
-      const x     = (e.clientX - rect.left) / rect.width  * canvas.width;
-      const y     = (e.clientY - rect.top)  / rect.height * canvas.height;
-      const headY = canvas.height * 0.25;
-      const bodyY = canvas.height * 0.60;
-      const cx    = canvas.width  / 2;
-      const dist  = Math.sqrt((x - cx) ** 2 + (y - headY) ** 2);
-
-      if (dist < canvas.width * 0.18)  handleHeadClick();
-      else if (y > headY && y < bodyY) handleBodyClick();
-      else                             handleAreaClick();
-    });
-
+    if (!canvas.dataset.modelClickBound) {
+      canvas.addEventListener('click', event => {
+        if (!model || model.isDragging || event.target !== canvas) return;
+        const rect = canvas.getBoundingClientRect();
+        const x = (event.clientX - rect.left) / rect.width;
+        const y = (event.clientY - rect.top) / rect.height;
+        const headY = 0.18;
+        const dist = Math.sqrt((x - 0.5) ** 2 + (y - headY) ** 2);
+        if (dist < 0.18) handleHeadClick();
+        else if (y > headY && y < 0.68) handleBodyClick();
+        else handleAreaClick();
+      });
+      canvas.dataset.modelClickBound = 'true';
+    }
   } catch (err) {
-    console.warn('Live2D gagal dimuat:', err.message);
+    const message = `Model 3D gagal dimuat: ${err.message || err}`;
+    console.error(message, err);
+    if (status) {
+      status.textContent = message;
+      status.hidden = false;
+    }
   }
 }
 
-function triggerExp(name) { if (!model) return; try { model.expression(name); } catch {} }
+function triggerExp(name) {
+  if (!model) return;
+  model.expression(name);
+  model.react(name);
+}
 
 function autoExpression(text) {
   const t = text.toLowerCase();
-  if (/gagal|error|anomali|masalah|rusak|down|offline/.test(t))         triggerExp('surprised');
-  else if (/maaf|aduh|khawatir/.test(t))                                 triggerExp('blush');
+  if (/down|offline|tidak aktif|tidak tersedia/.test(t))                triggerExp('crying');
+  else if (/critical|kritis|overload|melewati ambang/.test(t))           triggerExp('angry');
+  else if (/gagal|error|anomali|masalah|rusak/.test(t))                  triggerExp('surprised');
+  else if (/maaf|aduh|khawatir|perlu perhatian/.test(t))                 triggerExp('confused');
   else if (/tidak yakin|mungkin|belum pasti/.test(t))                    triggerExp('confused');
   else if (/berhasil|aman|stabil|aktif|normal|lancar/.test(t))           triggerExp('heart');
-  else if (/waspada|peringatan|alert|threshold/.test(t))                 triggerExp('angry');
+  else if (/waspada|peringatan|alert|threshold/.test(t))                 triggerExp('surprised');
   else if (/laporan|status|data|cpu|ram/.test(t))                        triggerExp('star');
-  setTimeout(() => { try { if(model) model.expression(''); } catch {} }, 4000);
+  setTimeout(() => { if (model) model.expression(''); }, 4000);
 }
 
 // ════════════════════════════════════
@@ -632,7 +613,11 @@ function toggleTTS() {
   const btn = document.getElementById('tts-toggle');
   btn.textContent = autoTTS ? '🔊' : '🔇';
   btn.classList.toggle('on', autoTTS);
-  if (!autoTTS) { synth.cancel(); ttsSpeaking = false; }
+  if (!autoTTS) {
+    synth.cancel();
+    ttsSpeaking = false;
+    if (model) model.motion('Idle');
+  }
 }
 
 function getBestVoice() {
@@ -648,6 +633,7 @@ function getBestVoice() {
 function playTTS(msgId, btn) {
   if (ttsSpeaking) {
     synth.cancel(); ttsSpeaking = false;
+    if (model) model.motion('Idle');
     document.querySelectorAll('.tts-btn').forEach(b => { b.classList.remove('playing'); b.textContent = '🔊 Dengar'; });
     if (btn.dataset.stopped === msgId) { btn.dataset.stopped = ''; return; }
   }
@@ -666,9 +652,9 @@ function playTTS(msgId, btn) {
   const setVoice = () => {
     const voice = getBestVoice();
     if (voice) ttsUtter.voice = voice;
-    if (model) { try { model.motion('Talk'); } catch {} }
-    ttsUtter.onend = () => { ttsSpeaking = false; btn.classList.remove('playing'); btn.textContent = '🔊 Dengar'; if(model){try{model.motion('Idle');}catch{}} };
-    ttsUtter.onerror = () => { ttsSpeaking = false; btn.classList.remove('playing'); btn.textContent = '🔊 Dengar'; };
+    if (model) model.motion('Talk', Math.min(120_000, Math.max(5000, cleanText.length * 70)));
+    ttsUtter.onend = () => { ttsSpeaking = false; btn.classList.remove('playing'); btn.textContent = '🔊 Dengar'; if(model) model.motion('Idle'); };
+    ttsUtter.onerror = () => { ttsSpeaking = false; btn.classList.remove('playing'); btn.textContent = '🔊 Dengar'; if(model) model.motion('Idle'); };
     synth.speak(ttsUtter);
   };
 
@@ -691,7 +677,11 @@ function initVoice() {
 function toggleVoice() {
   if (!recognition) return;
   if (isRecording) { recognition.stop(); return; }
-  if (ttsSpeaking) { synth.cancel(); ttsSpeaking = false; }
+  if (ttsSpeaking) {
+    synth.cancel();
+    ttsSpeaking = false;
+    if (model) model.motion('Idle');
+  }
   isRecording = true;
   document.getElementById('mic-btn').classList.add('recording');
   document.getElementById('mic-btn').textContent = '⏹';
@@ -703,24 +693,24 @@ function toggleVoice() {
 // INIT
 // ════════════════════════════════════
 // ════════════════════════════════════
-// LIVE2D CLICK REACTIONS
+// 3D MODEL CLICK REACTIONS
 // ════════════════════════════════════
 
 const clickResponses = {
     head: [
-        { expr: 'blush',     motion: 'Idle',  msg: 'H-hmph! Jangan sembarangan menyentuh kepala SK!' },
-        { expr: 'blush',     motion: 'DaiJi', msg: 'B-bukan berarti SK senang ya...' },
-        { expr: 'surprised', motion: 'Idle',  msg: '...!' },
+        { expr: 'confused',  motion: 'curious',   msg: 'Ada yang perlu saya periksa, Kak?' },
+        { expr: 'heart',     motion: 'reassure',  msg: 'Saya di sini. Apa yang sedang Anda butuhkan?' },
+        { expr: 'surprised', motion: 'surprised', msg: 'Saya mendengarkan, Kak.' },
     ],
     body: [
-        { expr: 'heart',     motion: 'DaiJi', msg: 'Shorekeeper siap bertugas, Kak.' },
-        { expr: 'star',      motion: 'Idle',  msg: 'Ada yang perlu SK bantu?' },
-        { expr: 'blush',     motion: 'DaiJi', msg: '...SK sedang sibuk memantau node.' },
+        { expr: 'heart',     motion: 'reassure', msg: 'Semua dalam pengawasan. Saya siap membantu.' },
+        { expr: 'confused',  motion: 'curious',  msg: 'Apa ada layanan yang ingin diperiksa?' },
+        { expr: 'heart',     motion: 'reassure', msg: 'Saya akan tetap menjaga sistem tetap stabil.' },
     ],
     area: [
-        { expr: 'surprised', motion: 'Idle',  msg: '!' },
-        { expr: 'confused',  motion: 'Idle',  msg: 'Hmm?' },
-        { expr: 'heart',     motion: 'Idle',  msg: '...' },
+        { expr: 'surprised', motion: 'surprised', msg: 'Ada perubahan?' },
+        { expr: 'confused',  motion: 'curious',   msg: 'Saya sedang menyimak.' },
+        { expr: 'heart',     motion: 'reassure',  msg: 'Silakan, saya siap membantu.' },
     ],
 };
 
@@ -735,7 +725,7 @@ function handleHeadClick() {
     const r = clickResponses.head[Math.floor(Math.random() * clickResponses.head.length)];
     triggerExp(r.expr);
     if (model) {
-        try { model.motion(r.motion); } catch {}
+        model.motion(r.motion);
     }
 
     // Tampilkan pesan bubble singkat
@@ -750,7 +740,7 @@ function handleBodyClick() {
     const r = clickResponses.body[Math.floor(Math.random() * clickResponses.body.length)];
     triggerExp(r.expr);
     if (model) {
-        try { model.motion(r.motion); } catch {}
+        model.motion(r.motion);
     }
     showClickBubble(r.msg);
 }
@@ -774,12 +764,12 @@ function getHeadScreenPos() {
   const rect = canvas.getBoundingClientRect();
 
   const s       = modelSettings || DEFAULT_MODEL;
-  const scale   = (s.scale || 92) / 100;
+  const scale   = (s.scale || DEFAULT_MODEL.scale) / 100;
   const offsetX = parseFloat(s.offsetX) || 0;
   const offsetY = parseFloat(s.offsetY) || 0;
 
-  // Live2D IceGirl: model berdiri dari bawah canvas.
-  // Kepala ada di ~18% dari atas canvas pada scale 100%.
+  // Model 3D berdiri dari bawah canvas.
+  // Kepala ada di ~15% dari atas canvas pada scale 100%.
   // Scale < 100 → model lebih kecil → kepala lebih turun proporsional.
   // offsetY positif = model naik → kepala ikut naik.
 
@@ -791,8 +781,8 @@ function getHeadScreenPos() {
 
   // Tinggi model visual = canvas.height * scale
   // Kepala ada di ~85% dari atas model (dari bawah pivot)
-  const modelH = rect.height * scale;
-  const headFromBottom = modelH * 0.85; // kepala 85% dari bawah = 15% dari atas model
+  const modelH = rect.height * (2.15 / 2.8) * scale;
+  const headFromBottom = modelH * 0.9;
 
   const headX = pivotX;
   const headY = pivotY - headFromBottom;
@@ -862,23 +852,34 @@ function showClickBubble(text) {
 // ════════════════════════════════════
 let currentMood = 'tenang';
 
-function applyMood(mood, expression, emoji) {
+function applyMood(mood, expression, label) {
   if (!mood || mood === currentMood) return;
   currentMood = mood;
 
-  // Update Live2D expression
+  // Update the model expression
   if (expression) triggerExp(expression);
 
   // Update mood indicator di header
   const ico = document.querySelector('#ph .ico');
-  if (ico) ico.textContent = emoji || '🛡️';
+  if (ico) ico.textContent = label || moodLabel(mood);
 
   // Update tooltip
   const btn = document.querySelector('#ph .ico');
   if (btn) btn.title = `Mood SK: ${mood}`;
 
   // Log
-  console.log(`🎭 Mood SK: ${mood}`);
+  console.log(`Mood SK: ${mood}`);
+}
+
+function moodLabel(mood) {
+  return ({
+    tenang: 'TENANG',
+    khawatir: 'PEDULI',
+    siaga: 'SIAGA',
+    frustrasi: 'FOKUS',
+    santai: 'SANTAI',
+    hangat: 'HANGAT',
+  })[mood] || 'SK';
 }
 
 async function loadMood() {
@@ -886,7 +887,7 @@ async function loadMood() {
   try {
     const r = await fetch('/api/mood', { headers: { Authorization: `Bearer ${token}` } });
     const d = await r.json();
-    if (d.ok) applyMood(d.mood, d.expression, d.emoji);
+    if (d.ok) applyMood(d.mood, d.expression, d.label);
   } catch {}
 }
 
@@ -1000,7 +1001,7 @@ async function logout() {
   localStorage.removeItem('sk_token');
   localStorage.removeItem('sk_role');
   token    = null;
-  userRole = 'guest';
+  userRole = 'admin';
   if (ws) { ws.close(); ws = null; }
   showLogin();
   // Reset form

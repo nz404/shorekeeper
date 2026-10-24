@@ -79,7 +79,9 @@ body.bg-custom { background-size: cover; background-position: center; }
 
 /* ── APP ── */
 #app { display: none; width: 100%; height: 100vh; position: relative; }
-#cv  { position: absolute; left: 0; top: 0; width: calc(100% - 400px); height: 100%; pointer-events: none; }
+#cv  { position: absolute; left: 0; top: 0; width: calc(100% - 400px); height: 100%; pointer-events: auto; touch-action: none; }
+#model-status { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 1; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-panel); color: var(--text-sec); font-size: 12px; pointer-events: none; }
+#model-status[hidden] { display: none; }
 .vignette { position: absolute; bottom: 0; left: 0; width: calc(100% - 400px); height: 200px; background: linear-gradient(transparent, rgba(6,9,15,0.8)); pointer-events: none; }
 
 /* ── TOOLBAR ── */
@@ -139,7 +141,7 @@ body.bg-custom { background-size: cover; background-position: center; }
 }
 
 #ph { padding: 16px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
-#ph .ico { width: 34px; height: 34px; border-radius: 50%; background: var(--bg-btn); border: 1px solid var(--border-hover); display: flex; align-items: center; justify-content: center; font-size: 15px; }
+#ph .ico { min-width: 42px; padding: 0 7px; height: 34px; border-radius: 18px; background: var(--bg-btn); border: 1px solid var(--border-hover); display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; letter-spacing: .3px; }
 #ph .name { font-size: 14px; color: var(--accent); font-weight: 600; letter-spacing: 1px; }
 #ph .sub  { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
 #dot { width: 7px; height: 7px; border-radius: 50%; background: #1a3040; margin-left: auto; transition: all .4s; }
@@ -148,13 +150,23 @@ body.bg-custom { background-size: cover; background-position: center; }
 #tts-toggle.on, #tts-toggle:hover { color: var(--accent); }
 
 /* ── QUICK ACTIONS ── */
-#qa-panel { padding: 10px 14px 0; border-bottom: 1px solid var(--border); }
-#qa-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; cursor: pointer; user-select: none; }
+#qa-panel { padding: 10px 14px 8px; border-bottom: 1px solid var(--border); }
+#qa-header { display: flex; align-items: center; justify-content: space-between; cursor: pointer; user-select: none; }
 #qa-title  { font-size: 10px; color: var(--text-muted); letter-spacing: 2px; text-transform: uppercase; }
 #qa-toggle-icon { font-size: 10px; color: var(--text-muted); transition: transform .3s; }
 #qa-toggle-icon.collapsed { transform: rotate(-90deg); }
-#qa-grid   { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 10px; overflow: hidden; transition: max-height .3s ease, opacity .3s ease, margin .3s ease; max-height: 200px; opacity: 1; }
-#qa-grid.hidden { max-height: 0; opacity: 0; margin-bottom: 0; }
+#qa-menu { max-height: 260px; opacity: 1; overflow: hidden; transition: max-height .25s ease, opacity .2s ease, margin .25s ease; margin-top: 8px; }
+#qa-menu.hidden { max-height: 0; opacity: 0; margin-top: 0; }
+#qa-categories { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin-bottom: 7px; }
+.qa-category {
+  background: transparent; border: 1px solid var(--border); color: var(--text-muted);
+  padding: 5px 4px; border-radius: 7px; cursor: pointer; font-size: 10px;
+  white-space: nowrap; transition: all .2s;
+}
+.qa-category:hover, .qa-category.active { background: var(--bg-btn); border-color: var(--border-hover); color: var(--accent); }
+#qa-grid { overflow-y: auto; max-height: 205px; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+.qa-group { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.qa-group[hidden] { display: none; }
 .qa-btn {
   background: var(--bg-qa); border: 1px solid var(--border); color: var(--text-sec);
   padding: 7px 8px; border-radius: 8px; cursor: pointer; font-size: 12px;
@@ -237,9 +249,10 @@ body.bg-custom { background-size: cover; background-position: center; }
   .side-panel    { position: fixed; left: 0; right: 0; top: 0; bottom: 0; width: 100% !important; border: none; z-index: 20; }
   #uptime-panel  { position: fixed; left: 0; right: 0; top: 0; bottom: 0; width: 100% !important; border: none; z-index: 20; }
   #ph { padding: 8px 12px; }
-  #ph .ico { width: 28px; height: 28px; font-size: 13px; }
+  #ph .ico { min-width: 40px; height: 28px; font-size: 8px; }
   #ph .name { font-size: 13px; }
-  #qa-grid { grid-template-columns: 1fr 1fr; gap: 5px; margin-bottom: 8px; }
+  #qa-menu { max-height: 180px; }
+  #qa-grid { max-height: 130px; }
   .qa-btn { font-size: 12px; padding: 8px 8px; }
   #msgs { padding: 10px 12px; gap: 8px; }
   .m { font-size: 14px; padding: 10px 12px; max-width: 92%; }

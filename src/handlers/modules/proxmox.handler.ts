@@ -2,11 +2,13 @@ import {
     getResources, getNodesStatus, controlResource,
     getAllClusters, addCluster, removeCluster, testClusterConnection,
 } from '../../services/proxmox.service';
+import { inputControls } from '../inputControls';
 
 // ─────────────────────────────────────────────
 // SAFE EDIT
 // ─────────────────────────────────────────────
 
+/** Memperbarui pesan menu atau mengirim pesan baru jika edit gagal. */
 const safeEdit = async (ctx: any, text: string, extra?: any): Promise<any> => {
     try {
         return await ctx.editMessageText(text, extra);
@@ -36,6 +38,9 @@ export const handleProxmoxMenu = async (ctx: any) => {
                 ],
                 [
                     { text: '➕ Tambah Cluster', callback_data: 'pve_add'      },
+                    { text: '✏️ Edit Cluster', callback_data: 'pve_edit_menu' },
+                ],
+                [
                     { text: '🗑️ Hapus Cluster',  callback_data: 'pve_del_menu' },
                 ],
                 [{ text: '⬅️ Kembali',           callback_data: 'back_to_help' }],
@@ -148,7 +153,7 @@ export const showAddClusterPrompt = async (ctx: any) => {
         '_Contoh: rumah, kantor, vps-utama_',
         {
             parse_mode: 'Markdown',
-            reply_markup: { inline_keyboard: [[{ text: '❌ Batal', callback_data: 'menu_proxmox' }]] },
+            reply_markup: inputControls('menu_proxmox'),
         }
     );
 };
@@ -180,7 +185,10 @@ export const handlePveWizardStep = async (
 
     if (step === 'pve_name') {
         if (!/^[\w\-]+$/.test(input)) {
-            await ctx.reply('❌ Nama hanya boleh huruf, angka, dan tanda -\nContoh: `rumah`, `vps-1`', { parse_mode: 'Markdown' });
+            await ctx.reply('❌ Nama hanya boleh huruf, angka, dan tanda -\nContoh: `rumah`, `vps-1`', {
+                parse_mode: 'Markdown',
+                reply_markup: inputControls('menu_proxmox'),
+            });
             return;
         }
         remoteSessions.set(userId, { ...session, pve_name: input, pve_step: 'pve_host' });
@@ -189,7 +197,7 @@ export const handlePveWizardStep = async (
             `📌 Nama: \`${input}\`\n\n` +
             '*Step 2/5* — Ketik *IP/hostname* Proxmox:\n' +
             '_Contoh: 192.168.1.100 atau pve.domain.com_',
-            { parse_mode: 'Markdown' }
+            { parse_mode: 'Markdown', reply_markup: inputControls('menu_proxmox') }
         );
         return;
     }
@@ -202,7 +210,7 @@ export const handlePveWizardStep = async (
             `🌐 Host: \`${input}\`\n\n` +
             '*Step 3/5* — Ketik *port* Proxmox:\n' +
             '_Default: 8006 — ketik 8006 kalau tidak tahu_',
-            { parse_mode: 'Markdown' }
+            { parse_mode: 'Markdown', reply_markup: inputControls('menu_proxmox') }
         );
         return;
     }
@@ -210,7 +218,10 @@ export const handlePveWizardStep = async (
     if (step === 'pve_port') {
         const port = parseInt(input);
         if (isNaN(port) || port < 1 || port > 65535) {
-            await ctx.reply('❌ Port tidak valid. Masukkan angka 1–65535, biasanya `8006`', { parse_mode: 'Markdown' });
+            await ctx.reply('❌ Port tidak valid. Masukkan angka 1–65535, biasanya `8006`', {
+                parse_mode: 'Markdown',
+                reply_markup: inputControls('menu_proxmox'),
+            });
             return;
         }
         remoteSessions.set(userId, { ...session, pve_port: port, pve_step: 'pve_user' });
@@ -220,7 +231,7 @@ export const handlePveWizardStep = async (
             `🌐 Host: \`${session.pve_host}:${port}\`\n\n` +
             '*Step 4/5* — Ketik *user@realm* Proxmox:\n' +
             '_Contoh: root@pam atau admin@pve_',
-            { parse_mode: 'Markdown' }
+            { parse_mode: 'Markdown', reply_markup: inputControls('menu_proxmox') }
         );
         return;
     }
@@ -235,7 +246,7 @@ export const handlePveWizardStep = async (
             '*Step 5/5* — Ketik *API Token Secret* Proxmox:\n' +
             '_Buat di: Datacenter → API Tokens → Add_\n' +
             '_Token Name harus: *shorekeeper*_',
-            { parse_mode: 'Markdown' }
+            { parse_mode: 'Markdown', reply_markup: inputControls('menu_proxmox') }
         );
         return;
     }
@@ -356,6 +367,24 @@ export const showDeleteClusterMenu = async (ctx: any) => {
 
     return safeEdit(ctx, '🗑️ *Hapus Cluster — Pilih:*', {
         parse_mode:   'Markdown',
+        reply_markup: { inline_keyboard: buttons },
+    });
+};
+
+export const showEditClusterMenu = async (ctx: any) => {
+    const clusters = await getAllClusters();
+    if (!clusters.length) {
+        return safeEdit(ctx, '⚠️ Belum ada cluster yang terdaftar.', {
+            reply_markup: { inline_keyboard: [[{ text: '⬅️ Kembali', callback_data: 'menu_proxmox' }]] },
+        });
+    }
+    const buttons = clusters.map(cluster => ([{
+        text: `✏️ ${cluster.name} (${cluster.host}:${cluster.port})`,
+        callback_data: `pve_edit_${cluster.id}`,
+    }]));
+    buttons.push([{ text: '⬅️ Kembali', callback_data: 'menu_proxmox' }]);
+    return safeEdit(ctx, '✏️ *Edit Cluster — Pilih:*', {
+        parse_mode: 'Markdown',
         reply_markup: { inline_keyboard: buttons },
     });
 };

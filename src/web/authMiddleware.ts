@@ -1,13 +1,14 @@
-import { createHash } from 'crypto';
+import { createHash, randomBytes, timingSafeEqual } from 'crypto';
 
 // ─────────────────────────────────────────────
 // TIPE SESSION
 // ─────────────────────────────────────────────
 
 export interface Session {
-    role:      'admin' | 'guest';
+    role:      'admin';
     username:  string;
     createdAt: number;
+    expiresAt: number;
 }
 
 // ─────────────────────────────────────────────
@@ -15,10 +16,8 @@ export interface Session {
 // ─────────────────────────────────────────────
 
 export const sessions     = new Map<string, Session>();
-export const guestCounter = new Map<string, { count: number; date: string }>();
 
 const SESSION_TTL_MS      = 24 * 60 * 60 * 1000;
-export const GUEST_LIMIT  = parseInt(process.env.WEB_GUEST_LIMIT || '5');
 
 // ─────────────────────────────────────────────
 // BRUTE FORCE PROTECTION
@@ -66,6 +65,15 @@ export const checkLoginAttempt = (ip: string): { allowed: boolean; remaining: nu
 
 export const recordFailedLogin = (ip: string): void => {
     const now   = Date.now();
+    if (loginAttempts.size >= 10_000 && !loginAttempts.has(ip)) {
+        for (const [key, attempt] of loginAttempts) {
+            if (now - attempt.lastAt > LOCKOUT_MS) loginAttempts.delete(key);
+        }
+        if (loginAttempts.size >= 10_000) {
+            const oldest = [...loginAttempts.entries()].sort((a, b) => a[1].lastAt - b[1].lastAt)[0];
+            if (oldest) loginAttempts.delete(oldest[0]);
+        }
+    }
     const entry = loginAttempts.get(ip) || { count: 0, lockedUntil: null, lastAt: now };
     entry.count   += 1;
     entry.lastAt   = now;
@@ -84,21 +92,27 @@ export const resetLoginAttempt = (ip: string): void => {
 // SESSION HELPERS
 // ─────────────────────────────────────────────
 
-export const generateToken = (): string =>
-    createHash('sha256')
-        .update(Date.now().toString() + Math.random().toString())
-        .digest('hex');
+export const generateToken = (): string => randomBytes(32).toString('hex');
 
-export const createSession = (role: 'admin' | 'guest', username: string): string => {
+export const createSession = (username: string): string => {
     const token = generateToken();
-    sessions.set(token, { role, username, createdAt: Date.now() });
-    setTimeout(() => sessions.delete(token), SESSION_TTL_MS);
+    const createdAt = Date.now();
+    sessions.set(token, { role: 'admin', username, createdAt, expiresAt: createdAt + SESSION_TTL_MS });
+    const expiry = setTimeout(() => sessions.delete(token), SESSION_TTL_MS);
+    expiry.unref();
     return token;
 };
 
 export const getSession = (authHeader?: string): Session | null => {
-    const token = authHeader?.replace('Bearer ', '');
-    return (token && sessions.get(token)) || null;
+    const match = authHeader?.match(/^Bearer ([a-f0-9]{64})$/i);
+    if (!match) return null;
+    const session = sessions.get(match[1]);
+    if (!session) return null;
+    if (Date.now() >= session.expiresAt) {
+        sessions.delete(match[1]);
+        return null;
+    }
+    return session;
 };
 
 /** Middleware helper — returns session or sends 401 */
@@ -116,23 +130,8 @@ export const requireAdmin = (req: any, res: any): Session | null => {
     return session;
 };
 
-// ─────────────────────────────────────────────
-// GUEST RATE LIMIT
-// ─────────────────────────────────────────────
-
-export const checkGuestLimit = (key: string): { allowed: boolean; remaining: number } => {
-    const today = new Date().toISOString().slice(0, 10);
-    const entry = guestCounter.get(key);
-    if (!entry || entry.date !== today) {
-        guestCounter.set(key, { count: 0, date: today });
-        return { allowed: true, remaining: GUEST_LIMIT };
-    }
-    const remaining = GUEST_LIMIT - entry.count;
-    return { allowed: remaining > 0, remaining };
-};
-
-export const incrementGuestCount = (key: string): void => {
-    const today = new Date().toISOString().slice(0, 10);
-    const entry = guestCounter.get(key) || { count: 0, date: today };
-    guestCounter.set(key, { count: entry.count + 1, date: today });
+export const matchesCredential = (provided: string, configured: string): boolean => {
+    const providedHash = createHash('sha256').update(provided, 'utf8').digest();
+    const configuredHash = createHash('sha256').update(configured, 'utf8').digest();
+    return timingSafeEqual(providedHash, configuredHash);
 };

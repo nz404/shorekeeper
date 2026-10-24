@@ -1,5 +1,6 @@
 import { runRemoteSSH } from '../../services/ssh.service';
 import { TEKS } from '../../config/persona';
+import { inputControls } from '../inputControls';
 
 // ─────────────────────────────────────────────
 // KONFIGURASI TIMEOUT — dari .env
@@ -12,13 +13,22 @@ const LONG_CMD_TIMEOUT_MS = parseInt(process.env.SSH_LONG_TIMEOUT_MS   || '60000
 // Command yang biasanya butuh waktu lama
 const LONG_COMMANDS = ['apt', 'apt-get', 'yum', 'dnf', 'pacman', 'pip', 'npm', 'yarn', 'docker pull', 'wget', 'curl'];
 
+/** Menentukan apakah command SSH memerlukan batas waktu eksekusi panjang. */
 const isLongCommand = (cmd: string): boolean =>
     LONG_COMMANDS.some(c => cmd.toLowerCase().startsWith(c));
 
 const sessionTimers = new Map<number, NodeJS.Timeout>();
 
+/** Membatalkan timer timeout sesi SSH milik user. */
+export const cancelSessionTimeout = (userId: number) => {
+    const timer = sessionTimers.get(userId);
+    if (timer) clearTimeout(timer);
+    sessionTimers.delete(userId);
+};
+
+/** Mengatur ulang timer yang menutup sesi SSH setelah tidak aktif. */
 export const resetSessionTimeout = (userId: number, remoteSessions: Map<number, any>, ctx: any) => {
-    if (sessionTimers.has(userId)) clearTimeout(sessionTimers.get(userId)!);
+    cancelSessionTimeout(userId);
 
     const timeout = setTimeout(async () => {
         if (remoteSessions.has(userId)) {
@@ -33,6 +43,7 @@ export const resetSessionTimeout = (userId: number, remoteSessions: Map<number, 
     sessionTimers.set(userId, timeout);
 };
 
+/** Memproses input wizard koneksi dan command sesi SSH. */
 export const handleSSHWizard = async (ctx: any, userId: number, input: string, remoteSessions: Map<number, any>) => {
     const session = remoteSessions.get(userId);
     if (!session) return;
@@ -40,7 +51,7 @@ export const handleSSHWizard = async (ctx: any, userId: number, input: string, r
     // Exit
     if (input.toLowerCase() === 'exit' || input.toLowerCase() === 'quit') {
         remoteSessions.delete(userId);
-        if (sessionTimers.has(userId)) clearTimeout(sessionTimers.get(userId)!);
+        cancelSessionTimeout(userId);
         return ctx.reply(TEKS.sshDisconnect(), { parse_mode: 'Markdown' });
     }
 
@@ -64,7 +75,7 @@ export const handleSSHWizard = async (ctx: any, userId: number, input: string, r
         remoteSessions.set(userId, session);
         return ctx.reply(
             '🔓 *Koneksi Terverifikasi!*\n\nSilakan masukkan perintah Linux.\n_Ketik `exit` untuk menutup sesi._',
-            { parse_mode: 'Markdown' }
+            { parse_mode: 'Markdown', reply_markup: inputControls('menu_ssh') }
         );
     }
 
@@ -99,14 +110,17 @@ export const handleSSHWizard = async (ctx: any, userId: number, input: string, r
 
             return ctx.reply(
                 `✅ *Output* \`${input}\`:\n\`\`\`bash\n${safeOutput || '(tidak ada output)'}\n\`\`\`\n\n_Lanjut command atau ketik \`exit\`._`,
-                { parse_mode: 'Markdown' }
+                { parse_mode: 'Markdown', reply_markup: inputControls('menu_ssh') }
             );
 
         } catch (err: any) {
             if (loadingMsg) {
                 await ctx.telegram.deleteMessage(ctx.chat.id, loadingMsg.message_id).catch(() => {});
             }
-            return ctx.reply(TEKS.sshGagal(err.message), { parse_mode: 'Markdown' });
+            return ctx.reply(TEKS.sshGagal(err.message), {
+                parse_mode: 'Markdown',
+                reply_markup: inputControls('menu_ssh'),
+            });
         }
     }
 };
